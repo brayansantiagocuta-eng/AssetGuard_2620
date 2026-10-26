@@ -1,0 +1,350 @@
+# =============================================================================
+# ASSETGUARD_2620 - GRAPHQL CONTRACT SCHEMA
+# Strict GraphQL communication (RNF-002)
+# Real Database Pagination (RNF-006)
+# Role-based Access Control (ADMIN, INSPECTOR, TECHNICIAN)
+# =============================================================================
+
+enum Role {
+  ADMIN
+  INSPECTOR
+  TECHNICIAN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AssetStatus {
+  AVAILABLE
+  RESERVED
+  ON_LOAN
+  MAINTENANCE
+  RETIRED
+}
+
+enum LoanRequestStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LoanStatus {
+  ACTIVE
+  RETURNED
+  OVERDUE
+}
+
+enum CalibrationResult {
+  PASS
+  FAIL
+}
+
+enum FinancialMovementType {
+  DEPRECIATION
+  LOSS
+  DAMAGE
+  MAINTENANCE_COST
+}
+
+# -----------------------------------------------------------------------------
+# CORE DOMAIN TYPES
+# -----------------------------------------------------------------------------
+
+type User {
+  id: ID!
+  role: Role!
+  fullName: String!
+  email: String!
+  status: UserStatus!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Category {
+  id: ID!
+  name: String!
+  usefulLifeMonths: Int!
+}
+
+type Location {
+  id: ID!
+  name: String!
+  type: String!
+}
+
+type CalibrationStatus {
+  isCompliant: Boolean!
+  daysUntilNextDue: Int!
+  cyclesRemaining: Int!
+  statusColor: String! # GREEN, YELLOW, RED
+  warningMessage: String
+}
+
+type Asset {
+  id: ID!
+  serialNumber: String!
+  qrCode: String
+  model: String!
+  estimatedValue: Float!
+  acquisitionDate: String!
+  status: AssetStatus!
+  usageCycles: Int!
+  maxUsageCycles: Int!
+  lastCalibrationDate: String!
+  calibrationIntervalDays: Int!
+  category: Category
+  location: Location
+  calibrationStatus: CalibrationStatus
+  createdAt: String!
+  updatedAt: String!
+}
+
+type LoanRequest {
+  id: ID!
+  technician: User!
+  asset: Asset!
+  requestDate: String!
+  requiredDate: String!
+  expectedReturnDate: String!
+  motive: String!
+  status: LoanRequestStatus!
+  activeOtp: OtpTokenInfo
+  loan: Loan
+  createdAt: String!
+}
+
+type OtpTokenInfo {
+  id: ID!
+  expiresAt: String!
+  attemptsRemaining: Int!
+  used: Boolean!
+  # Se devuelve únicamente en la respuesta de generateLoanOtp; en consultas llega null.
+  pin: String
+}
+
+type Loan {
+  id: ID!
+  loanRequestId: ID!
+  asset: Asset!
+  deliveryDate: String!
+  actualReturnDate: String
+  status: LoanStatus!
+  notes: String
+}
+
+type CalibrationRecord {
+  id: ID!
+  asset: Asset!
+  calibrationDate: String!
+  dueDate: String!
+  result: CalibrationResult!
+  technicianName: String!
+  notes: String
+  createdAt: String!
+}
+
+type FinancialSummary {
+  totalAssetsCount: Int!
+  totalAcquisitionValue: Float!
+  currentDepreciatedValue: Float!
+  overdueAssetsCount: Int!
+  totalValueAtRisk: Float!
+  currency: String!
+}
+
+type AuditLog {
+  id: ID!
+  userId: ID
+  userFullName: String
+  action: String!
+  entityName: String!
+  entityId: ID
+  oldValue: String
+  newValue: String
+  ipAddress: String
+  createdAt: String!
+}
+
+type JobExecution {
+  id: ID!
+  jobName: String!
+  executedAt: String!
+  status: String!
+  recordsProcessed: Int!
+  details: String
+}
+
+# -----------------------------------------------------------------------------
+# PAGINATION TYPES (Native PostgreSQL LIMIT / OFFSET wrapper)
+# -----------------------------------------------------------------------------
+
+type PageInfo {
+  currentPage: Int!
+  pageSize: Int!
+  totalElements: Int!
+  totalPages: Int!
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+}
+
+type AssetPage {
+  items: [Asset!]!
+  pageInfo: PageInfo!
+}
+
+type UserPage {
+  items: [User!]!
+  pageInfo: PageInfo!
+}
+
+type LoanRequestPage {
+  items: [LoanRequest!]!
+  pageInfo: PageInfo!
+}
+
+type LoanPage {
+  items: [Loan!]!
+  pageInfo: PageInfo!
+}
+
+type AuditLogPage {
+  items: [AuditLog!]!
+  pageInfo: PageInfo!
+}
+
+type JobExecutionPage {
+  items: [JobExecution!]!
+  pageInfo: PageInfo!
+}
+
+# -----------------------------------------------------------------------------
+# AUTH & MUTATION PAYLOADS
+# -----------------------------------------------------------------------------
+
+type BulkUploadResult {
+  success: Boolean!
+  totalProcessed: Int!
+  insertedCount: Int!
+  errorMessage: String
+  failedRowNumber: Int
+}
+
+# -----------------------------------------------------------------------------
+# INPUTS
+# -----------------------------------------------------------------------------
+
+input PaginationInput {
+  page: Int = 0
+  size: Int = 10
+}
+
+input CreateUserInput {
+  fullName: String!
+  email: String!
+  password: String!
+  role: Role!
+}
+
+input UpdateUserInput {
+  fullName: String
+  role: Role
+  status: UserStatus
+}
+
+input CreateAssetInput {
+  serialNumber: String!
+  qrCode: String
+  model: String!
+  estimatedValue: Float!
+  acquisitionDate: String!
+  categoryId: ID!
+  locationId: ID!
+  maxUsageCycles: Int = 500
+  calibrationIntervalDays: Int = 180
+}
+
+input CreateLoanRequestInput {
+  assetId: ID!
+  requiredDate: String!
+  expectedReturnDate: String!
+  motive: String!
+}
+
+input BulkAssetRowInput {
+  serialNumber: String!
+  model: String!
+  estimatedValue: Float!
+  acquisitionDate: String!
+  categoryName: String!
+  locationName: String!
+}
+
+# -----------------------------------------------------------------------------
+# QUERIES
+# -----------------------------------------------------------------------------
+
+type Query {
+  # Health check
+  health: String!
+
+  # Auth profile
+  me: User!
+
+  # Users (ADMIN)
+  users(pagination: PaginationInput, role: Role, status: UserStatus): UserPage!
+  userById(id: ID!): User
+
+  # Assets & Catalog (ADMIN, INSPECTOR, TECHNICIAN)
+  assets(pagination: PaginationInput, status: AssetStatus, categoryId: ID, search: String): AssetPage!
+  assetById(id: ID!): Asset
+  assetBySerialNumber(serialNumber: String!): Asset
+  assetCalibrationStatus(assetId: ID!): CalibrationStatus!
+
+  # Metadata lookups
+  categories: [Category!]!
+  locations: [Location!]!
+
+  # Loans & Custody
+  loanRequests(pagination: PaginationInput, status: LoanRequestStatus): LoanRequestPage!
+  activeLoans(pagination: PaginationInput): LoanPage!
+  myLoanHistory(pagination: PaginationInput, status: LoanStatus): LoanPage!
+
+  # Reports & Finance (ADMIN)
+  financialSummary: FinancialSummary!
+  auditLogs(pagination: PaginationInput, action: String, entityName: String): AuditLogPage!
+  jobExecutions(pagination: PaginationInput): JobExecutionPage!
+}
+
+# -----------------------------------------------------------------------------
+# MUTATIONS
+# -----------------------------------------------------------------------------
+
+type Mutation {
+  # User Management (ADMIN)
+  createUser(input: CreateUserInput!): User!
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  resetUserPassword(id: ID!, newPassword: String!): User!
+
+  # Asset Management (ADMIN, INSPECTOR)
+  createAsset(input: CreateAssetInput!): Asset!
+  updateAssetStatus(id: ID!, status: AssetStatus!, notes: String): Asset!
+  bulkUploadAssets(assets: [BulkAssetRowInput!]!): BulkUploadResult!
+  bulkUploadAssetsFile(fileName: String!, base64Content: String!): BulkUploadResult!
+
+  # Calibration (INSPECTOR, ADMIN)
+  registerCalibration(assetId: ID!, result: CalibrationResult!, notes: String): Asset!
+
+  # Loan Flow (TECHNICIAN, INSPECTOR)
+  createLoanRequest(input: CreateLoanRequestInput!): LoanRequest!
+  approveLoanRequest(id: ID!): LoanRequest!
+  rejectLoanRequest(id: ID!, reason: String): LoanRequest!
+  generateLoanOtp(loanRequestId: ID!): OtpTokenInfo!
+  validateLoanOTP(loanRequestId: ID!, pin: String!): Loan!
+  returnLoan(loanId: ID!, damaged: Boolean!, notes: String): Loan!
+
+  # CRON Manual Trigger (ADMIN)
+  runDailyOverdueJob: Int!
+}

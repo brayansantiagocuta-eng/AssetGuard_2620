@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F1F1F2;
+  --foreground: #172B4D;
+  --warm-gray: #BCBABE;
+  --mid-accent: #AFC8D0;
+  --ice-blue: #A1D6E2;
+  --glacier-blue: #1995AD;
+  --section-accent: #1995AD;
+  --section-glow: rgba(161, 214, 226, 0.35);
+  --section-bg-tint: #F1F1F2;
+  --font-title: var(--font-doppio-one), "Doppio One", sans-serif;
+  --font-body: "Calibre", "Calibri", "Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+body {
+  background-color: #F1F1F2;
+  color: #172B4D;
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-title {
+  font-family: var(--font-title);
+  letter-spacing: -0.01em;
+}
+
+p,
+span,
+label,
+input,
+select,
+textarea,
+button,
+td,
+th,
+a {
+  font-family: var(--font-body);
+}
+
+/* Custom scrollbars and transitions */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F1F2;
+}
+::-webkit-scrollbar-thumb {
+  background: #BCBABE;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #AFC8D0;
+}
+
+/* Liquid Wave Undulation Keyframes */
+@keyframes waveUndulateFast {
+  0% {
+    transform: translateY(0%) scaleX(1);
+  }
+  25% {
+    transform: translateY(-18%) scaleX(1.18);
+  }
+  50% {
+    transform: translateY(-35%) scaleX(0.92);
+  }
+  75% {
+    transform: translateY(-15%) scaleX(1.14);
+  }
+  100% {
+    transform: translateY(0%) scaleX(1);
+  }
+}
+
+@keyframes waveUndulateMedium {
+  0% {
+    transform: translateY(-30%) scaleX(1);
+  }
+  33% {
+    transform: translateY(-8%) scaleX(1.22);
+  }
+  66% {
+    transform: translateY(-42%) scaleX(0.88);
+  }
+  100% {
+    transform: translateY(-30%) scaleX(1);
+  }
+}
+
+@keyframes waveUndulateSlow {
+  0% {
+    transform: translateY(-15%) scaleX(1.05);
+  }
+  50% {
+    transform: translateY(-38%) scaleX(0.9);
+  }
+  100% {
+    transform: translateY(-15%) scaleX(1.05);
+  }
+}
+
+.animate-wave-layer-1 {
+  animation: waveUndulateFast 4.2s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+.animate-wave-layer-2 {
+  animation: waveUndulateMedium 5.2s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+.animate-wave-layer-3 {
+  animation: waveUndulateSlow 6.2s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+@keyframes liquidDropRipple {
+  0% {
+    transform: translate(-50%, -50%) scale(0.15);
+    opacity: 0.85;
+  }
+  35% {
+    transform: translate(-50%, -50%) scale(24);
+    opacity: 0.6;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(52);
+    opacity: 0.25;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(75);
+    opacity: 0;
+  }
+}
+
+.animate-section-spread {
+  animation: liquidDropRipple 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Transición suave de entrada de contenido entre vistas */
+@keyframes pageEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-enter {
+  animation: pageEnter 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
