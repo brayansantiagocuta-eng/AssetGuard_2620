@@ -122,8 +122,8 @@ public class AuthController {
 
             jdbcTemplate.update(
                     """
-                    INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
-                    VALUES (?, 'PASSWORD_RESET_REQUESTED', 'users', ?, NULL, ?::jsonb, ?)
+                    INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
+                    VALUES (?, 'PASSWORD_RESET_REQUESTED', 'users', ?, NULL, ?, ?)
                     """,
                     user.user().id(),
                     user.user().id(),
@@ -132,8 +132,8 @@ public class AuthController {
         } else {
             jdbcTemplate.update(
                     """
-                    INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
-                    VALUES (NULL, 'PASSWORD_RESET_UNKNOWN_EMAIL', 'users', NULL, NULL, ?::jsonb, ?)
+                    INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
+                    VALUES (NULL, 'PASSWORD_RESET_UNKNOWN_EMAIL', 'users', NULL, NULL, ?, ?)
                     """,
                     "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"USER_NOT_FOUND\"}",
                     clientIp(httpRequest));
@@ -212,8 +212,8 @@ public class AuthController {
         // 6. Auditoría
         jdbcTemplate.update(
                 """
-                INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
-                VALUES (?, 'PASSWORD_RESET_COMPLETED', 'users', ?, NULL, ?::jsonb, ?)
+                INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
+                VALUES (?, 'PASSWORD_RESET_COMPLETED', 'users', ?, NULL, ?, ?)
                 """,
                 userId,
                 userId,
