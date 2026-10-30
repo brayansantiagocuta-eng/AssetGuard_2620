@@ -5,6 +5,8 @@ import { useQuery, useMutation } from "@apollo/client/react";
 import { useAuth } from "@/context/AuthContext";
 import { GET_AUDIT_LOGS_QUERY, GET_JOB_EXECUTIONS_QUERY } from "@/lib/graphql/queries";
 import { RUN_DAILY_OVERDUE_JOB_MUTATION } from "@/lib/graphql/mutations";
+import { getLocalAuditEvents } from "@/lib/auditLogger";
+import { exportAuditToStyledExcel } from "@/lib/excelExportHelper";
 import {
   FileText,
   Play,
@@ -247,7 +249,7 @@ function buildDailyReport(targetDate: string, dayLogs: HumanAuditEntry[]): Daily
 }
 
 export default function AuditPage() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isAdmin = role === "ADMIN";
 
   const [activeTab, setActiveTab] = useState<"LOGS" | "CRON">("LOGS");
@@ -283,6 +285,38 @@ export default function AuditPage() {
   const [isExecutingCron, setIsExecutingCron] = useState(false);
   const [cronNotice, setCronNotice] = useState<string | null>(null);
 
+  // Modales de confirmación para acciones críticas
+  const [showConfirmExport, setShowConfirmExport] = useState(false);
+  const [showConfirmCloseDay, setShowConfirmCloseDay] = useState(false);
+
+  // Eventos de auditoría locales persistidos (generados en tiempo real por el sistema)
+  const [localAuditEvents, setLocalAuditEvents] = useState<HumanAuditEntry[]>([]);
+
+  useEffect(() => {
+    const loadEvents = () => {
+      const items = getLocalAuditEvents();
+      if (items.length > 0) {
+        setLocalAuditEvents(
+          items.map((it) => ({
+            id: it.id || `AUD-${Math.random()}`,
+            userName: it.userName,
+            userRole: it.userRole || "Usuario",
+            actionCode: it.actionCode,
+            actionTitle: it.actionTitle,
+            actionDescription: it.actionDescription,
+            actionCategory: it.actionCategory,
+            entityName: it.entityName,
+            ipAddress: it.ipAddress || "192.168.10.22",
+            createdAt: it.createdAt || new Date().toISOString().replace("T", " ").slice(0, 16),
+          }))
+        );
+      }
+    };
+    loadEvents();
+    window.addEventListener("assetguard:audit-updated", loadEvents);
+    return () => window.removeEventListener("assetguard:audit-updated", loadEvents);
+  }, []);
+
   const { data: logsData, refetch: refetchLogs } = useQuery<{
     auditLogs?: {
       items?: Array<{
@@ -316,10 +350,11 @@ export default function AuditPage() {
 
   const [runCronMutation] = useMutation(RUN_DAILY_OVERDUE_JOB_MUTATION);
 
-  // Mapear logs de GraphQL a lenguaje 100% entendible por cualquier persona
+  // Mapear logs de GraphQL + eventos locales a lenguaje 100% entendible
   const logs = useMemo<HumanAuditEntry[]>(() => {
+    const list: HumanAuditEntry[] = [...localAuditEvents];
     if (logsData?.auditLogs?.items && logsData.auditLogs.items.length > 0) {
-      return logsData.auditLogs.items.map((l) => {
+      const mapped = logsData.auditLogs.items.map((l) => {
         const trans = translateAction(l.action);
         return {
           id: `AUD-${l.id}`,
@@ -334,9 +369,18 @@ export default function AuditPage() {
           createdAt: String(l.createdAt || "").slice(0, 16).replace("T", " "),
         };
       });
+      list.push(...mapped);
     }
-    return INITIAL_FALLBACK_LOGS;
-  }, [logsData]);
+    if (list.length === 0) {
+      return INITIAL_FALLBACK_LOGS;
+    }
+    const seen = new Set<string>();
+    return list.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [logsData, localAuditEvents]);
 
   // Mapear ejecuciones CRON de GraphQL + ejecuciones manuales
   const cronJobs = useMemo<HumanCronExecution[]>(() => {
@@ -462,7 +506,7 @@ export default function AuditPage() {
     });
   }, [logs, searchQuery, selectedCategory, hiddenLogIds]);
 
-  // Requisito 1: Al exportar el registro de auditoría se descargan y se ocultan los movimientos activos
+  // Requisito 1: Al exportar el registro de auditoría se descargan en Excel estilizado y se ocultan los movimientos activos
   const handleExportAudit = () => {
     if (filteredLogs.length === 0) {
       setAuditNotice({
@@ -472,28 +516,8 @@ export default function AuditPage() {
       return;
     }
 
-    const headers = ["Momento", "Responsable", "Rol", "Accion", "Detalle", "Categoria", "IP"];
-    const rows = filteredLogs.map((log) => [
-      `"${log.createdAt.replace(/"/g, '""')}"`,
-      `"${log.userName.replace(/"/g, '""')}"`,
-      `"${(log.userRole || "Usuario").replace(/"/g, '""')}"`,
-      `"${log.actionTitle.replace(/"/g, '""')}"`,
-      `"${log.actionDescription.replace(/"/g, '""')}"`,
-      `"${log.actionCategory}"`,
-      `"${log.ipAddress}"`,
-    ]);
-
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const nowStamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Auditoria_AssetGuard_${nowStamp}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const auditor = user?.fullName || (role === "ADMIN" ? "Administrador de Auditoría" : "Inspector de Calidad");
+    exportAuditToStyledExcel(filteredLogs, "Bitácora Oficial de Auditoría y Trazabilidad", null, auditor);
 
     // Ocultar los movimientos exportados
     const exportedIds = filteredLogs.map((l) => l.id);
@@ -505,7 +529,7 @@ export default function AuditPage() {
 
     setAuditNotice({
       type: "success",
-      text: `Se exportaron ${exportedIds.length} movimiento(s) en CSV y se ocultaron de la vista activa. Permanecen disponibles en el Historial Diario inferior.`,
+      text: `Se exportaron ${exportedIds.length} movimiento(s) en Excel (.xls) y se ocultaron de la vista activa. Permanecen disponibles en el Historial Diario inferior.`,
     });
   };
 
@@ -579,26 +603,17 @@ export default function AuditPage() {
       });
       return;
     }
-    const headers = ["Momento", "Responsable", "Rol", "Accion", "Detalle", "Categoria", "IP"];
-    const rows = targetLogs.map((log) => [
-      `"${log.createdAt.replace(/"/g, '""')}"`,
-      `"${log.userName.replace(/"/g, '""')}"`,
-      `"${(log.userRole || "Usuario").replace(/"/g, '""')}"`,
-      `"${log.actionTitle.replace(/"/g, '""')}"`,
-      `"${log.actionDescription.replace(/"/g, '""')}"`,
-      `"${log.actionCategory}"`,
-      `"${log.ipAddress}"`,
-    ]);
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Informe_Auditoria_${targetDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    const auditor = user?.fullName || (role === "ADMIN" ? "Administrador de Auditoría" : "Inspector de Calidad");
+    exportAuditToStyledExcel(
+      targetLogs,
+      `Informe Consolidado de Jornada — ${targetDate}`,
+      selectedDayReport,
+      auditor
+    );
+    setAuditNotice({
+      type: "success",
+      text: `Informe consolidado de la fecha ${targetDate} descargado exitosamente en Excel (.xls).`,
+    });
   };
 
   return (
@@ -619,7 +634,8 @@ export default function AuditPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        {/* Barra de Acciones Superior Ordenada y Limpia */}
+        <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -627,32 +643,32 @@ export default function AuditPage() {
               if (refetchJobs) refetchJobs();
             }}
             title="Actualizar datos"
-            className="p-3 rounded-2xl border border-[#AFC8D0] text-[#172B4D] hover:bg-[#F1F1F2] transition-colors cursor-pointer"
+            className="p-3 rounded-2xl border border-[#AFC8D0] text-[#172B4D] hover:bg-[#F1F1F2] transition-colors cursor-pointer shrink-0"
           >
             <RefreshCw className="h-5 w-5 text-[#1995AD]" />
           </button>
 
-          {/* Botón Exportar Bitácora (Descarga CSV y oculta movimientos) */}
+          {/* Botón Exportar Bitácora con Confirmación */}
           <button
             type="button"
-            onClick={handleExportAudit}
-            title="Descargar CSV y ocultar movimientos exportados"
-            className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-[#1995AD] bg-[#1995AD]/10 text-[#1995AD] font-bold text-sm hover:bg-[#1995AD] hover:text-white transition-all cursor-pointer shadow-xs"
+            onClick={() => setShowConfirmExport(true)}
+            title="Descargar informe en Excel (.xls) y archivar movimientos"
+            className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-3 rounded-2xl border border-[#1995AD] bg-[#1995AD]/10 text-[#1995AD] font-bold text-xs sm:text-sm hover:bg-[#1995AD] hover:text-white transition-all cursor-pointer shadow-xs shrink-0"
           >
-            <Download className="h-4 w-4" />
-            <span>Exportar Bitácora</span>
+            <FileSpreadsheet className="h-4 w-4" />
+            <span>Exportar Bitácora (Excel)</span>
           </button>
 
-          {/* Botón Administrador: Cerrar Jornada (Iniciar en 0) */}
+          {/* Botón Administrador: Cerrar Jornada con Confirmación */}
           {isAdmin && (
             <button
               type="button"
-              onClick={handleCloseDayRollover}
-              title="Generar resumen de hoy, ocultar movimientos e iniciar cuenta en 0"
-              className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-[#172B4D] bg-[#172B4D] text-white font-bold text-sm hover:bg-[#172B4D]/90 transition-all cursor-pointer shadow-xs"
+              onClick={() => setShowConfirmCloseDay(true)}
+              title="Generar resumen de hoy e iniciar cuenta en 0"
+              className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-3 rounded-2xl border border-[#172B4D] bg-[#172B4D] text-white font-bold text-xs sm:text-sm hover:bg-[#172B4D]/90 transition-all cursor-pointer shadow-xs shrink-0"
             >
               <History className="h-4 w-4 text-[#A1D6E2]" />
-              <span>Cerrar Jornada (Iniciar en 0)</span>
+              <span>Cerrar Jornada (0)</span>
             </button>
           )}
 
@@ -661,14 +677,92 @@ export default function AuditPage() {
               type="button"
               disabled={isExecutingCron}
               onClick={handleTriggerCron}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#1995AD] to-[#148296] text-white font-bold text-sm shadow-md hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 sm:px-5 py-3 rounded-2xl bg-gradient-to-r from-[#1995AD] to-[#148296] text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer disabled:opacity-50 shrink-0"
             >
-              <Bot className={`h-5 w-5 ${isExecutingCron ? "animate-spin" : ""}`} />
+              <Bot className={`h-4 w-4 sm:h-5 sm:w-5 ${isExecutingCron ? "animate-spin" : ""}`} />
               <span>{isExecutingCron ? "Verificando..." : "Ejecutar Robot CRON"}</span>
             </button>
           )}
         </div>
       </div>
+
+      {/* Modal de Confirmación: ¿Estás seguro de Exportar Bitácora? */}
+      {showConfirmExport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#1995AD]/40 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-[#1995AD]/15 text-[#1995AD] flex items-center justify-center shrink-0">
+                <Download className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="font-title text-xl text-[#172B4D]">¿Estás seguro de exportar?</h3>
+                <p className="text-xs text-[#172B4D]/65">Confirmación de exportación y archivo</p>
+              </div>
+            </div>
+            <p className="text-sm text-[#172B4D]/80 leading-relaxed">
+              Se descargará un informe oficial en formato <strong>Excel (.xls)</strong> estructurado con diseño corporativo, métricas de actividad y casillas de firma ({filteredLogs.length} movimientos), y se archivarán en el Historial Consolidado para que la cuenta diaria comience en 0.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F1F2]">
+              <button
+                type="button"
+                onClick={() => setShowConfirmExport(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmExport(false);
+                  handleExportAudit();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
+              >
+                Sí, Exportar Bitácora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación: ¿Estás seguro de Cerrar Jornada? */}
+      {showConfirmCloseDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#172B4D]/40 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                <History className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="font-title text-xl text-[#172B4D]">¿Estás seguro de cerrar jornada?</h3>
+                <p className="text-xs text-[#172B4D]/65">Cierre diario y reinicio del contador a 0</p>
+              </div>
+            </div>
+            <p className="text-sm text-[#172B4D]/80 leading-relaxed">
+              Esta acción consolidará los movimientos del día de hoy en un informe seguro e iniciará la bitácora activa en <strong>0</strong>. Todo el historial consolidado permanecerá disponible para consulta en la parte inferior.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F1F2]">
+              <button
+                type="button"
+                onClick={() => setShowConfirmCloseDay(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmCloseDay(false);
+                  handleCloseDayRollover();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#172B4D] hover:bg-[#1995AD] text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
+              >
+                Sí, Cerrar Jornada (0)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notificación de Auditoría / Exportación */}
       {auditNotice && (
@@ -728,7 +822,10 @@ export default function AuditPage() {
               <Bot className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-title text-lg text-[#172B4D]">¿Qué hace el Robot Automático (CRON)?</h3>
+              {/* Signo de apertura de interrogación corregido con tipografía limpia */}
+              <h3 className="font-title text-lg text-[#172B4D]">
+                <span className="font-sans font-semibold">¿</span>Qué hace el Robot Automático (CRON)?
+              </h3>
               <p className="text-xs text-[#172B4D]/60">Monitoreo nocturno continuo a medianoche</p>
             </div>
           </div>

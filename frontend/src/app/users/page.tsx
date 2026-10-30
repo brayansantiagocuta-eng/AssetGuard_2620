@@ -7,6 +7,7 @@ import { useAuth, type UserRole } from "@/context/AuthContext";
 import { CustomSelect, SelectOption } from "@/components/ui/CustomSelect";
 import { GET_USERS_QUERY } from "@/lib/graphql/queries";
 import { CREATE_USER_MUTATION, UPDATE_USER_MUTATION } from "@/lib/graphql/mutations";
+import { recordAuditEvent } from "@/lib/auditLogger";
 import {
   Users,
   UserPlus,
@@ -197,6 +198,15 @@ export default function UsersManagementPage() {
         };
         setUsers((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
         void refetchUsers();
+        recordAuditEvent({
+          userName: "Administrador",
+          userRole: "ADMIN",
+          actionCode: "CREATE_USER",
+          actionTitle: "Registro de Usuario",
+          actionDescription: `Creó la cuenta corporativa de ${u.fullName} (${newForm.email}) con rol ${u.role}`,
+          actionCategory: "USER",
+          entityName: "Usuarios",
+        });
         setFeedback({ type: "success", text: `Usuario ${u.fullName} (${u.role}) registrado exitosamente.` });
         setShowModal(false);
       }
@@ -222,6 +232,15 @@ export default function UsersManagementPage() {
     } catch {}
 
     setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, role: nextRole, status: nextStatus } : u)));
+    recordAuditEvent({
+      userName: "Administrador",
+      userRole: "ADMIN",
+      actionCode: "UPDATE_USER",
+      actionTitle: "Actualización de Usuario",
+      actionDescription: `Modificó la cuenta de ${target.fullName} (Rol: ${nextRole}, Estado: ${nextStatus})`,
+      actionCategory: "USER",
+      entityName: "Usuarios",
+    });
     setFeedback({ type: "success", text: `Usuario ${target.fullName} actualizado (${nextRole} — ${nextStatus === "ACTIVE" ? "ACTIVO" : "INACTIVO"}).` });
   };
 
@@ -344,13 +363,22 @@ export default function UsersManagementPage() {
               <button type="button" onClick={() => setShowModal(false)} className="p-1.5 rounded-lg text-[#BCBABE] hover:text-[#172B4D] cursor-pointer"><X className="h-5 w-5" /></button>
             </div>
 
-            <form onSubmit={handleCreateUser} noValidate className="flex flex-col flex-1 overflow-hidden">
+            <form onSubmit={handleCreateUser} noValidate autoComplete="off" data-lpignore="true" className="flex flex-col flex-1 overflow-hidden">
+              {/* Campos falsos invisibles para atrapar cualquier intento del gestor de contraseñas de autofill */}
+              <input type="text" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+              <input type="password" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+
               <div ref={modalBodyRef} className="p-5 sm:p-6 space-y-4 text-sm overflow-y-auto flex-1">
                 {/* Nombre */}
                 <div>
                   <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Nombre Completo</label>
                   <input
-                    type="text" required placeholder="Ej: Laura Martínez" value={newForm.fullName}
+                    type="text"
+                    required
+                    placeholder="Ej: Laura Martínez"
+                    value={newForm.fullName}
+                    autoComplete="off"
+                    name="new_user_fullname_no_auto"
                     onChange={(e) => setNewForm({ ...newForm, fullName: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D]"
                   />
@@ -362,7 +390,18 @@ export default function UsersManagementPage() {
                   <div className="relative">
                     <Mail className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
-                      type="email" required placeholder="ej: nombre.apellido@globalnet.com" value={newForm.email}
+                      type="email"
+                      required
+                      placeholder="ej: nombre.apellido@globalnet.com"
+                      value={newForm.email}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
+                      name="assetguard_new_email_unique_input"
+                      id="assetguard_new_email_input"
+                      data-lpignore="true"
+                      data-form-type="other"
                       onChange={(e) => setNewForm({ ...newForm, email: e.target.value })}
                       onBlur={() => setTouched({ ...touched, email: true })}
                       className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D] focus:ring-2 focus:ring-[#1995AD]"
@@ -386,7 +425,13 @@ export default function UsersManagementPage() {
                     <div className="relative">
                       <Phone className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
-                        type="tel" required maxLength={10} placeholder="3001234567" value={newForm.phone}
+                        type="tel"
+                        required
+                        maxLength={10}
+                        placeholder="3001234567"
+                        value={newForm.phone}
+                        autoComplete="off"
+                        name="new_user_phone_no_auto"
                         onChange={(e) => setNewForm({ ...newForm, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
                         onBlur={() => setTouched({ ...touched, phone: true })}
                         className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D]"
@@ -406,7 +451,19 @@ export default function UsersManagementPage() {
                   <div className="relative">
                     <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
-                      type={newForm.showPwd ? "text" : "password"} required maxLength={20} placeholder="Define una contraseña segura" value={newForm.password}
+                      type={newForm.showPwd ? "text" : "password"}
+                      required
+                      maxLength={20}
+                      placeholder="Define una contraseña segura"
+                      value={newForm.password}
+                      autoComplete="new-password"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
+                      name="assetguard_new_password_unique_input"
+                      id="assetguard_new_password_input"
+                      data-lpignore="true"
+                      data-form-type="other"
                       onChange={(e) => {
                         const clean = e.target.value.split("").filter((ch) => ALLOWED_PASSWORD_REGEX.test(ch)).join("").slice(0, 20);
                         setNewForm({ ...newForm, password: clean });

@@ -13,6 +13,8 @@ import {
   CREATE_LOAN_REQUEST_MUTATION,
   UPDATE_ASSET_STATUS_MUTATION,
 } from "@/lib/graphql/mutations";
+import { recordAuditEvent } from "@/lib/auditLogger";
+import { exportInventoryToStyledExcel } from "@/lib/excelExportHelper";
 import {
   Search,
   Plus,
@@ -312,7 +314,7 @@ const AUTHORIZED_BRANDS_BY_CATEGORY: Record<string, string[]> = {
 };
 
 export default function InventoryPage() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [assets, setAssets] = useState<AssetItem[]>(() => {
     if (typeof window === "undefined") return INITIAL_ASSETS;
     try {
@@ -412,12 +414,27 @@ export default function InventoryPage() {
   const requestModalBodyRef = useRef<HTMLDivElement>(null);
 
   // Bloquea el scroll de la página de fondo mientras el desplegable o cualquier modal esté abierto
+  const [previewQrAsset, setPreviewQrAsset] = useState<AssetItem | null>(null);
+  const [previewQrDataUrl, setPreviewQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (previewQrAsset) {
+      const code = previewQrAsset.qrCode || `QR-${previewQrAsset.serialNumber}`;
+      QRCode.toDataURL(code, { width: 300, margin: 1, color: { dark: "#172B4D", light: "#FFFFFF" } })
+        .then(setPreviewQrDataUrl)
+        .catch(() => setPreviewQrDataUrl(null));
+    } else {
+      setPreviewQrDataUrl(null);
+    }
+  }, [previewQrAsset]);
+
   useEffect(() => {
     const hasModalOpen =
       isNewAssetOpen ||
       !!selectedAssetForStatusChange ||
       !!selectedAssetForDepreciation ||
       !!selectedAssetForRequest ||
+      !!previewQrAsset ||
       isBulkModalOpen;
 
     if (hasModalOpen) {
@@ -433,6 +450,7 @@ export default function InventoryPage() {
     selectedAssetForStatusChange,
     selectedAssetForDepreciation,
     selectedAssetForRequest,
+    previewQrAsset,
     isBulkModalOpen,
   ]);
 
@@ -872,7 +890,49 @@ export default function InventoryPage() {
     };
   };
 
+  // Equipos solicitados exclusivamente por este técnico (leídos desde préstamos locales)
+  const myRequestedSerials = useMemo(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const saved = localStorage.getItem("assetguard_local_loans");
+      if (saved) {
+        const list = JSON.parse(saved);
+        if (Array.isArray(list)) {
+          const userMatches = list.filter((l: any) =>
+            !user?.fullName ||
+            l.technicianName?.toLowerCase() === user?.fullName?.toLowerCase() ||
+            l.technicianName?.toLowerCase() === "brayan cuta"
+          );
+          return new Set<string>(userMatches.map((l: any) => String(l.assetSerial).toUpperCase()));
+        }
+      }
+    } catch {}
+    return new Set<string>();
+  }, [user?.fullName]);
+
+  // Permiso de descarga QR: Administradores e Inspectores tienen acceso total;
+  // El Técnico solo puede ver y descargar el QR si ya solicitó el equipo.
+  const canDownloadPreviewQr = useMemo(() => {
+    if (!previewQrAsset) return false;
+    if (role === "ADMIN" || role === "INSPECTOR") return true;
+    if (role === "TECHNICIAN") {
+      const s = previewQrAsset.serialNumber.toUpperCase();
+      return myRequestedSerials.has(s) || previewQrAsset.status === "ON_LOAN" || previewQrAsset.status === "RESERVED";
+    }
+    return false;
+  }, [previewQrAsset, role, myRequestedSerials]);
+
   const filteredAssets = assets.filter((asset) => {
+    // Si el usuario es Técnico:
+    // 1. NO debe ver los equipos en taller (MAINTENANCE)
+    // 2. Solo debe ver los que están DISPONIBLES o los que él solicitó exclusivamente
+    if (role === "TECHNICIAN") {
+      if (asset.status === "MAINTENANCE") return false;
+      const isAvailable = asset.status === "AVAILABLE";
+      const isMine = myRequestedSerials.has(asset.serialNumber.toUpperCase());
+      if (!isAvailable && !isMine) return false;
+    }
+
     const matchesSearch =
       asset.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asset.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1101,54 +1161,9 @@ export default function InventoryPage() {
   };
 
   const handleExportInventory = () => {
-    const headers = [
-      "Serie",
-      "Equipo / Modelo",
-      "Categoria",
-      "Ubicacion",
-      "Estado",
-      "Usos Actuales",
-      "Usos Maximos",
-      "Fecha Compra",
-      "Valor Compra",
-      "Desgaste Acumulado",
-      "Valor Real Hoy",
-    ];
-
-    const statusName = (st: AssetItem["status"]) =>
-      st === "AVAILABLE" ? "Disponible" : st === "ON_LOAN" ? "En Prestamo" : "Mantenimiento";
-
-    const rows = filteredAssets.map((a) => {
-      const dep = calculateDepreciation(a, usefulLifeYears);
-      return [
-        a.serialNumber,
-        `"${a.model}"`,
-        a.category,
-        `"${a.location}"`,
-        statusName(a.status),
-        a.usageCycles,
-        a.maxUsageCycles,
-        a.acquisitionDate,
-        a.estimatedValue.toFixed(2),
-        dep.accumulated.toFixed(2),
-        dep.bookValue.toFixed(2),
-      ].join(",");
-    });
-
-    // BOM UTF-8 (\uFEFF) para que Excel en español abra tildes y columnas directamente
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const today = new Date().toISOString().split("T")[0];
-    link.href = url;
-    link.setAttribute("download", `Inventario_AssetGuard_2620_${today}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    setNotice("Archivo descargado en tu carpeta de Descargas.");
+    const author = user?.fullName || (role === "ADMIN" ? "Administrador de Activos" : role === "INSPECTOR" ? "Inspector" : "Técnico");
+    exportInventoryToStyledExcel(filteredAssets, usefulLifeYears, author);
+    setNotice("Informe de desempeño y valoración de equipos exportado en Excel (.xls).");
   };
 
   const downloadQrTag = async (asset: AssetItem) => {
@@ -1237,6 +1252,44 @@ export default function InventoryPage() {
   const handleRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAssetForRequest) return;
+
+    // Generar o renovar el código QR reemplazando el anterior
+    const refreshedQr = `QR-${selectedAssetForRequest.serialNumber}-${Date.now().toString().slice(-4)}`;
+    
+    // Actualizar el QR en el estado local de inventario
+    setAssets((prev) =>
+      prev.map((a) => (a.id === selectedAssetForRequest.id ? { ...a, qrCode: refreshedQr } : a))
+    );
+
+    // Registrar en préstamos locales para habilitar acceso al QR del técnico
+    try {
+      const savedLoansRaw = localStorage.getItem("assetguard_local_loans");
+      const currentLoans = savedLoansRaw ? JSON.parse(savedLoansRaw) : [];
+      const newLoanReq = {
+        id: `REQ-${Date.now().toString().slice(-4)}`,
+        loanRequestId: Date.now().toString(),
+        assetSerial: selectedAssetForRequest.serialNumber,
+        assetModel: selectedAssetForRequest.model,
+        technicianName: user?.fullName || "Brayan Cuta",
+        status: "REQUESTED",
+        requestDate: new Date().toISOString().split("T")[0],
+        expectedReturnDate: defaultReturnDate,
+        motive: requestMotive || "Solicitud directa desde catálogo",
+        otpSecondsRemaining: 0,
+      };
+      localStorage.setItem("assetguard_local_loans", JSON.stringify([newLoanReq, ...currentLoans]));
+    } catch {}
+
+    recordAuditEvent({
+      userName: user?.fullName || "Técnico de Campo",
+      userRole: role || "TECHNICIAN",
+      actionCode: "CREATE_LOAN_REQUEST",
+      actionTitle: "Solicitud desde Inventario",
+      actionDescription: `Solicitó el activo ${selectedAssetForRequest.model} (${selectedAssetForRequest.serialNumber}) y se renovó su código QR (${refreshedQr})`,
+      actionCategory: "LOAN",
+      entityName: "Inventario",
+    });
+
     try {
       await createLoanRequestMutation({
         variables: {
@@ -1251,7 +1304,7 @@ export default function InventoryPage() {
     } catch {
       // fallback
     }
-    setNotice(`Solicitud enviada para ${selectedAssetForRequest.model}.`);
+    setNotice(`Solicitud enviada para ${selectedAssetForRequest.model}. El código QR ha sido renovado exitosamente.`);
     setSelectedAssetForRequest(null);
     setRequestMotive("");
   };
@@ -1294,9 +1347,10 @@ export default function InventoryPage() {
                 type="button"
                 onClick={handleExportInventory}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#AFC8D0] text-xs font-bold text-[#172B4D] hover:bg-[#AFC8D0]/25 cursor-pointer"
+                title="Exportar informe ejecutivo de desempeño y valoración de equipos a Excel"
               >
-                <Download className="h-4 w-4 text-[#1995AD]" />
-                <span>Exportar</span>
+                <FileSpreadsheet className="h-4 w-4 text-[#1995AD]" />
+                <span>Exportar Excel</span>
               </button>
               <button
                 type="button"
@@ -2141,8 +2195,8 @@ export default function InventoryPage() {
 
                       <button
                         type="button"
-                        onClick={() => downloadQrTag(asset)}
-                        title="Descargar Etiqueta QR Oficial"
+                        onClick={() => setPreviewQrAsset(asset)}
+                        title="Ver Código QR Oficial y Ficha"
                         className="p-2 rounded-xl text-[#1995AD] bg-[#A1D6E2]/25 hover:bg-[#A1D6E2]/50 border border-[#1995AD]/30 transition-colors cursor-pointer"
                       >
                         <QrCode className="h-4 w-4" />
@@ -2471,6 +2525,125 @@ export default function InventoryPage() {
                 id="bulk-file-input"
               />
             </label>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Desglose y Vista Previa del Código QR Oficial */}
+      {isMounted && previewQrAsset && createPortal(
+        <div
+          onClick={() => setPreviewQrAsset(null)}
+          className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-900/65 backdrop-blur-xs p-3 sm:p-4 flex items-center justify-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border-2 border-[#1995AD]/50 my-auto relative z-10 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between border-b border-[#F1F1F2] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-xl bg-[#1995AD]/15 text-[#1995AD] flex items-center justify-center">
+                  <QrCode className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-title text-xl text-[#172B4D]">Etiqueta QR Oficial</h3>
+                  <p className="text-xs text-[#172B4D]/60">{previewQrAsset.serialNumber}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewQrAsset(null)}
+                className="text-[#BCBABE] hover:text-[#172B4D] cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Visualización del Código QR y Descripción */}
+            <div className="flex flex-col sm:flex-row items-center gap-5 bg-[#F8FAFC] p-4 rounded-2xl border border-[#AFC8D0]/40">
+              <div className="bg-white p-3 rounded-2xl border-2 border-[#1995AD]/30 shadow-xs shrink-0 flex items-center justify-center w-36 h-36">
+                {previewQrDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewQrDataUrl} alt={`QR ${previewQrAsset.serialNumber}`} className="w-full h-full object-contain" />
+                ) : (
+                  <div className="animate-pulse text-xs text-[#1995AD]">Generando QR...</div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-xs text-[#172B4D]/80 flex-1">
+                <p className="font-title text-sm text-[#172B4D] font-bold">{previewQrAsset.model}</p>
+                <p><strong className="text-[#172B4D]">Serial:</strong> {previewQrAsset.serialNumber}</p>
+                <p><strong className="text-[#172B4D]">Categoría:</strong> {previewQrAsset.category}</p>
+                <p><strong className="text-[#172B4D]">Ubicación:</strong> {previewQrAsset.location}</p>
+                <p><strong className="text-[#172B4D]">Token ID:</strong> {previewQrAsset.qrCode || `QR-${previewQrAsset.serialNumber}`}</p>
+                <p className="pt-1 text-[11px] text-[#172B4D]/60 leading-tight">
+                  Etiqueta óptica de verificación física en bodega y trazabilidad para auditoría.
+                </p>
+              </div>
+            </div>
+
+            {/* Control de Acceso según Rol y Solicitud */}
+            {canDownloadPreviewQr ? (
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-800 font-semibold flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Acceso autorizado para inspección y descarga de la etiqueta oficial.</span>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewQrAsset(null)}
+                    className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadQrTag(previewQrAsset);
+                      setPreviewQrAsset(null);
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Descargar Etiqueta QR Oficial</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    Acceso Restringido al Código QR
+                  </p>
+                  <p className="text-[11px] text-amber-800/80 leading-relaxed">
+                    Como técnico operativo, no puedes descargar la etiqueta QR antes de solicitar el préstamo del equipo. Primero debes registrar la solicitud de préstamo para habilitar su código oficial de custodia.
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewQrAsset(null)}
+                    className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
+                  >
+                    Entendido
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = previewQrAsset;
+                      setPreviewQrAsset(null);
+                      setSelectedAssetForRequest(target);
+                    }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#1995AD] to-[#148296] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>Solicitar Préstamo Ahora</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body

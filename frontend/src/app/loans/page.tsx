@@ -17,6 +17,7 @@ import {
   VALIDATE_LOAN_OTP_MUTATION,
   RETURN_LOAN_MUTATION,
 } from "@/lib/graphql/mutations";
+import { recordAuditEvent } from "@/lib/auditLogger";
 import {
   KeyRound,
   ClipboardList,
@@ -51,6 +52,8 @@ export interface UnifiedLoanItem {
   otpCode?: string;
   otpSecondsRemaining: number;
 }
+
+const STORAGE_KEY_LOANS = "assetguard_local_loans";
 
 const INITIAL_FALLBACK_LOANS: UnifiedLoanItem[] = [
   {
@@ -87,6 +90,18 @@ const INITIAL_FALLBACK_LOANS: UnifiedLoanItem[] = [
     expectedReturnDate: "2026-10-18",
     motive: "Auditoría de ruido y potencia en cabecera",
     otpCode: "115892",
+    otpSecondsRemaining: 0,
+  },
+  {
+    id: "LOAN-104",
+    loanId: "4",
+    assetSerial: "NC-DSX8000-551",
+    assetModel: "Certificador Fluke DSX-8000 Cat 8",
+    technicianName: "Angie Ramos",
+    status: "ACTIVE",
+    expectedReturnDate: "2026-11-04",
+    motive: "Certificación de cableado estructurado en sede central",
+    otpCode: "338901",
     otpSecondsRemaining: 0,
   },
 ];
@@ -130,8 +145,25 @@ export default function LoansPage() {
   const [validateLoanOtpMutation, { loading: validatingOtp }] = useMutation(VALIDATE_LOAN_OTP_MUTATION);
   const [returnLoanMutation, { loading: returningLoan }] = useMutation(RETURN_LOAN_MUTATION);
 
-  // 3. Estados locales
-  const [localLoans, setLocalLoans] = useState<UnifiedLoanItem[]>(INITIAL_FALLBACK_LOANS);
+  // 3. Estados locales persistentes
+  const [localLoans, setLocalLoans] = useState<UnifiedLoanItem[]>(() => {
+    if (typeof window === "undefined") return INITIAL_FALLBACK_LOANS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LOANS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_FALLBACK_LOANS;
+  });
+
+  const saveLoansState = (items: UnifiedLoanItem[]) => {
+    setLocalLoans(items);
+    try {
+      localStorage.setItem(STORAGE_KEY_LOANS, JSON.stringify(items));
+    } catch {}
+  };
   const [filterStatus, setFilterStatus] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -309,6 +341,16 @@ export default function LoansPage() {
     e.preventDefault();
     setRequestError(null);
 
+    const todayStr = new Date().toISOString().split("T")[0];
+    if (requiredDate < todayStr) {
+      setRequestError("La fecha requerida no puede ser anterior a la fecha de hoy.");
+      return;
+    }
+    if (expectedReturnDate < requiredDate) {
+      setRequestError("La fecha de devolución debe ser igual o posterior a la fecha requerida.");
+      return;
+    }
+
     if (!selectedAssetId) {
       setRequestError("Selecciona el equipo a solicitar.");
       return;
@@ -329,12 +371,23 @@ export default function LoansPage() {
       otpSecondsRemaining: 0,
     };
 
-    // 1. Inserción inmediata y visible al instante para el técnico
-    setLocalLoans((prev) => [optimisticItem, ...prev.filter((l) => l.id !== optimisticItem.id)]);
+    // Inserción inmediata persistida
+    const nextList = [optimisticItem, ...localLoans.filter((l) => l.id !== optimisticItem.id)];
+    saveLoansState(nextList);
     setIsRequestModalOpen(false);
     setNotice({
       message: `¡Solicitud registrada de inmediato para ${optimisticItem.assetModel}!`,
       type: "success",
+    });
+
+    recordAuditEvent({
+      userName: user?.fullName || "Técnico de Campo",
+      userRole: role || "TECHNICIAN",
+      actionCode: "CREATE_LOAN_REQUEST",
+      actionTitle: "Solicitud de Préstamo",
+      actionDescription: `Registró solicitud para el equipo ${optimisticItem.assetModel} (${optimisticItem.assetSerial}) con devolución el ${expectedReturnDate}`,
+      actionCategory: "LOAN",
+      entityName: "Préstamos",
     });
 
     const assetIdToSubmit = selectedAssetId;
@@ -358,25 +411,24 @@ export default function LoansPage() {
       if (dataObj?.createLoanRequest) {
         const created = dataObj.createLoanRequest;
         const realId = String(created.id);
-        setLocalLoans((prev) =>
-          prev.map((item) =>
-            item.id === optimisticItem.id
-              ? {
-                  ...item,
-                  id: `REQ-${realId}`,
-                  loanRequestId: realId,
-                  assetSerial: created.asset?.serialNumber || item.assetSerial,
-                  assetModel: created.asset?.model || item.assetModel,
-                }
-              : item
-          )
+        const updated = localLoans.map((item) =>
+          item.id === optimisticItem.id
+            ? {
+                ...item,
+                id: `REQ-${realId}`,
+                loanRequestId: realId,
+                assetSerial: created.asset?.serialNumber || item.assetSerial,
+                assetModel: created.asset?.model || item.assetModel,
+              }
+            : item
         );
+        saveLoansState(updated);
       }
 
       if (refetchRequests) refetchRequests();
       if (refetchHistory) refetchHistory();
     } catch (err: any) {
-      // Si la llamada falla o hay error de red, la solicitud optimista permanece visible en sesión
+      // Solicitud persiste en localLoans
     }
   };
 
@@ -386,17 +438,21 @@ export default function LoansPage() {
       if (item.loanRequestId) {
         await approveLoanRequestMutation({ variables: { id: item.loanRequestId } });
       }
-      setLocalLoans((prev) =>
-        prev.map((l) => (l.id === item.id ? { ...l, status: "APPROVED" } : l))
-      );
-      setNotice({ message: `Solicitud aprobada: ${item.assetSerial}`, type: "success" });
-      if (refetchRequests) refetchRequests();
-    } catch {
-      setLocalLoans((prev) =>
-        prev.map((l) => (l.id === item.id ? { ...l, status: "APPROVED" } : l))
-      );
-      setNotice({ message: `Solicitud aprobada: ${item.assetSerial}`, type: "success" });
-    }
+    } catch {}
+
+    const updated = localLoans.map((l) => (l.id === item.id ? { ...l, status: "APPROVED" as const } : l));
+    saveLoansState(updated);
+    recordAuditEvent({
+      userName: user?.fullName || "Administrador",
+      userRole: role || "ADMIN",
+      actionCode: "APPROVE_LOAN_REQUEST",
+      actionTitle: "Aprobación de Solicitud",
+      actionDescription: `Autorizó el préstamo de ${item.assetModel} (${item.assetSerial}) solicitado por ${item.technicianName}`,
+      actionCategory: "LOAN",
+      entityName: "Préstamos",
+    });
+    setNotice({ message: `Solicitud aprobada: ${item.assetSerial}`, type: "success" });
+    if (refetchRequests) refetchRequests();
   };
 
   // Rechazar solicitud (ADMIN / INSPECTOR)
@@ -407,17 +463,21 @@ export default function LoansPage() {
           variables: { id: item.loanRequestId, reason: "Equipo no disponible temporalmente" },
         });
       }
-      setLocalLoans((prev) =>
-        prev.map((l) => (l.id === item.id ? { ...l, status: "REJECTED" } : l))
-      );
-      setNotice({ message: `Solicitud rechazada: ${item.assetSerial}`, type: "error" });
-      if (refetchRequests) refetchRequests();
-    } catch {
-      setLocalLoans((prev) =>
-        prev.map((l) => (l.id === item.id ? { ...l, status: "REJECTED" } : l))
-      );
-      setNotice({ message: `Solicitud rechazada: ${item.assetSerial}`, type: "error" });
-    }
+    } catch {}
+
+    const updated = localLoans.map((l) => (l.id === item.id ? { ...l, status: "REJECTED" as const } : l));
+    saveLoansState(updated);
+    recordAuditEvent({
+      userName: user?.fullName || "Administrador",
+      userRole: role || "ADMIN",
+      actionCode: "REJECT_LOAN_REQUEST",
+      actionTitle: "Rechazo de Solicitud",
+      actionDescription: `Rechazó la solicitud de ${item.assetModel} (${item.assetSerial}) solicitada por ${item.technicianName}`,
+      actionCategory: "LOAN",
+      entityName: "Préstamos",
+    });
+    setNotice({ message: `Solicitud rechazada: ${item.assetSerial}`, type: "error" });
+    if (refetchRequests) refetchRequests();
   };
 
   // Generar o consultar PIN OTP (ADMIN / INSPECTOR / TECHNICIAN)
@@ -433,20 +493,21 @@ export default function LoansPage() {
           variables: { loanRequestId: item.loanRequestId },
         });
         const pin = (res?.data as { generateLoanOtp?: { pin?: string } })?.generateLoanOtp?.pin || "839201";
-        const updated = { ...item, otpCode: pin, otpSecondsRemaining: 300 };
-        setLocalLoans((prev) => prev.map((l) => (l.id === item.id ? updated : l)));
-        setSelectedOtpLoan(updated);
+        const updatedItem = { ...item, otpCode: pin, otpSecondsRemaining: 300 };
+        const updated = localLoans.map((l) => (l.id === item.id ? updatedItem : l));
+        saveLoansState(updated);
+        setSelectedOtpLoan(updatedItem);
         return;
       }
     } catch {
       // ignore
     }
 
-    // Código simulado seguro de 6 dígitos
     const randomPin = Math.floor(100000 + Math.random() * 900000).toString();
-    const updated = { ...item, otpCode: randomPin, otpSecondsRemaining: 300 };
-    setLocalLoans((prev) => prev.map((l) => (l.id === item.id ? updated : l)));
-    setSelectedOtpLoan(updated);
+    const updatedItem = { ...item, otpCode: randomPin, otpSecondsRemaining: 300 };
+    const updated = localLoans.map((l) => (l.id === item.id ? updatedItem : l));
+    saveLoansState(updated);
+    setSelectedOtpLoan(updatedItem);
   };
 
   // Validar PIN OTP para entrega física
@@ -463,11 +524,19 @@ export default function LoansPage() {
           },
         });
       }
-      setLocalLoans((prev) =>
-        prev.map((l) =>
-          l.id === selectedValidationLoan.id ? { ...l, status: "ACTIVE" } : l
-        )
+      const updated = localLoans.map((l) =>
+        l.id === selectedValidationLoan.id ? { ...l, status: "ACTIVE" as const } : l
       );
+      saveLoansState(updated);
+      recordAuditEvent({
+        userName: user?.fullName || "Inspector de Bodega",
+        userRole: role || "INSPECTOR",
+        actionCode: "VALIDATE_OTP_DELIVERY",
+        actionTitle: "Entrega con PIN OTP",
+        actionDescription: `Validó PIN OTP y transfirió custodia de ${selectedValidationLoan.assetModel} (${selectedValidationLoan.assetSerial}) a ${selectedValidationLoan.technicianName}`,
+        actionCategory: "OTP",
+        entityName: "Custodia Física",
+      });
       setNotice({
         message: `¡Entrega confirmada y custodia transferida! Activo: ${selectedValidationLoan.assetSerial}`,
         type: "success",
@@ -477,13 +546,20 @@ export default function LoansPage() {
       setPinError(null);
       if (refetchRequests) refetchRequests();
     } catch (err: any) {
-      // Si coincide con el PIN local, validar
       if (selectedValidationLoan.otpCode && enteredPin.trim() === selectedValidationLoan.otpCode) {
-        setLocalLoans((prev) =>
-          prev.map((l) =>
-            l.id === selectedValidationLoan.id ? { ...l, status: "ACTIVE" } : l
-          )
+        const updated = localLoans.map((l) =>
+          l.id === selectedValidationLoan.id ? { ...l, status: "ACTIVE" as const } : l
         );
+        saveLoansState(updated);
+        recordAuditEvent({
+          userName: user?.fullName || "Inspector de Bodega",
+          userRole: role || "INSPECTOR",
+          actionCode: "VALIDATE_OTP_DELIVERY",
+          actionTitle: "Entrega con PIN OTP",
+          actionDescription: `Validó PIN OTP y transfirió custodia de ${selectedValidationLoan.assetModel} (${selectedValidationLoan.assetSerial}) a ${selectedValidationLoan.technicianName}`,
+          actionCategory: "OTP",
+          entityName: "Custodia Física",
+        });
         setNotice({
           message: `¡Entrega confirmada! Activo: ${selectedValidationLoan.assetSerial}`,
           type: "success",
@@ -512,34 +588,30 @@ export default function LoansPage() {
           },
         });
       }
-      setLocalLoans((prev) =>
-        prev.map((l) =>
-          l.id === selectedReturnLoan.id ? { ...l, status: "RETURNED" } : l
-        )
-      );
-      setNotice({
-        message: `Devolución completada y registrada en inventario: ${selectedReturnLoan.assetSerial}`,
-        type: "success",
-      });
-      setSelectedReturnLoan(null);
-      setHasDamage(false);
-      setReturnNotes("");
-      if (refetchRequests) refetchRequests();
-      if (refetchHistory) refetchHistory();
-    } catch {
-      setLocalLoans((prev) =>
-        prev.map((l) =>
-          l.id === selectedReturnLoan.id ? { ...l, status: "RETURNED" } : l
-        )
-      );
-      setNotice({
-        message: `Devolución registrada: ${selectedReturnLoan.assetSerial}`,
-        type: "success",
-      });
-      setSelectedReturnLoan(null);
-      setHasDamage(false);
-      setReturnNotes("");
-    }
+    } catch {}
+
+    const updated = localLoans.map((l) =>
+      l.id === selectedReturnLoan.id ? { ...l, status: "RETURNED" as const } : l
+    );
+    saveLoansState(updated);
+    recordAuditEvent({
+      userName: user?.fullName || "Inspector de Bodega",
+      userRole: role || "INSPECTOR",
+      actionCode: "RETURN_LOAN",
+      actionTitle: "Devolución de Equipo",
+      actionDescription: `Recibió en bodega ${selectedReturnLoan.assetModel} (${selectedReturnLoan.assetSerial}) devuelto por ${selectedReturnLoan.technicianName}`,
+      actionCategory: "RETURN",
+      entityName: "Inventario",
+    });
+    setNotice({
+      message: `Devolución completada y registrada en inventario: ${selectedReturnLoan.assetSerial}`,
+      type: "success",
+    });
+    setSelectedReturnLoan(null);
+    setHasDamage(false);
+    setReturnNotes("");
+    if (refetchRequests) refetchRequests();
+    if (refetchHistory) refetchHistory();
   };
 
   return (
@@ -582,8 +654,36 @@ export default function LoansPage() {
             className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#1995AD] to-[#148296] text-white font-bold text-sm shadow-md hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
           >
             <Plus className="h-5 w-5 stroke-[2.5]" />
-            <span>+ Solicitar Préstamo</span>
+            <span>Solicitar Préstamo</span>
           </button>
+        </div>
+      </div>
+
+      {/* Tarjeta Explicativa del Proceso OTP */}
+      <div className="bg-gradient-to-r from-[#172B4D]/5 via-[#1995AD]/10 to-[#A1D6E2]/25 border border-[#1995AD]/30 rounded-2xl p-4 sm:p-5 shadow-xs">
+        <div className="flex items-start gap-3.5">
+          <div className="h-10 w-10 rounded-xl bg-[#1995AD] text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+            <KeyRound className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="font-title text-base text-[#172B4D]">
+              ¿Cómo funciona el proceso de seguridad con Código PIN OTP (6 Dígitos)?
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-[#172B4D]/80 pt-1">
+              <div className="p-2.5 rounded-xl bg-white/70 border border-[#1995AD]/20">
+                <span className="font-bold text-[#1995AD] block mb-0.5">Paso 1: Solicitud & Autorización</span>
+                El técnico registra la solicitud y el administrador o inspector valida la vigencia técnica y la aprueba.
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/70 border border-[#1995AD]/20">
+                <span className="font-bold text-[#1995AD] block mb-0.5">Paso 2: Generación del PIN</span>
+                El solicitante pulsa &quot;Ver PIN OTP&quot; para obtener un código dinámico de 6 dígitos válido por 5 minutos.
+              </div>
+              <div className="p-2.5 rounded-xl bg-white/70 border border-[#1995AD]/20">
+                <span className="font-bold text-[#1995AD] block mb-0.5">Paso 3: Entrega Física en Bodega</span>
+                El encargado de bodega ingresa el PIN del técnico para confirmar y sellar la custodia del equipo.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -873,7 +973,7 @@ export default function LoansPage() {
                   />
                 </div>
 
-                {/* Fechas */}
+                {/* Fechas con restricción mínima: no permite fechas pasadas */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
@@ -882,6 +982,7 @@ export default function LoansPage() {
                     <input
                       type="date"
                       required
+                      min={new Date().toISOString().split("T")[0]}
                       value={requiredDate}
                       onChange={(e) => setRequiredDate(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
@@ -895,6 +996,7 @@ export default function LoansPage() {
                     <input
                       type="date"
                       required
+                      min={requiredDate || new Date().toISOString().split("T")[0]}
                       value={expectedReturnDate}
                       onChange={(e) => setExpectedReturnDate(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"

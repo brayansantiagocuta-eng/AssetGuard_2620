@@ -24,6 +24,8 @@ const ALLOWED_PWD_REGEX = /^[a-zA-Z0-9@#$*_!%&\-]*$/;
 const TAB_EMAIL_KEY = "assetguard_tab_email";
 const TAB_REMEMBER_KEY = "assetguard_tab_remember";
 const GLOBAL_REMEMBER_KEY = "assetguard_remembered_email";
+const LAST_USER_EMAIL_KEY = "assetguard_last_login_email";
+const LAST_USER_PWD_KEY = "assetguard_last_login_pwd";
 
 // Validaciones puras desacopladas del ciclo de vida del componente
 const validateEmail = (val: string): string[] => {
@@ -87,6 +89,21 @@ export default function LoginPage() {
   useEffect(() => {
     setIsMounted(true);
     try {
+      // 1. Cargar las credenciales del último usuario recordado
+      const lastEmail = localStorage.getItem(LAST_USER_EMAIL_KEY)?.trim();
+      const lastPwd = localStorage.getItem(LAST_USER_PWD_KEY);
+      if (lastEmail) {
+        setForm((f) => ({
+          ...f,
+          email: lastEmail,
+          password: lastPwd || f.password,
+          remember: true,
+        }));
+        sessionStorage.setItem(TAB_EMAIL_KEY, lastEmail);
+        sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
+        return;
+      }
+
       const tabEmail = sessionStorage.getItem(TAB_EMAIL_KEY)?.trim();
       const tabRem = sessionStorage.getItem(TAB_REMEMBER_KEY);
       if (tabEmail) {
@@ -140,14 +157,20 @@ export default function LoginPage() {
         sessionStorage.setItem(TAB_EMAIL_KEY, cleanEmail);
         sessionStorage.setItem(TAB_REMEMBER_KEY, String(form.remember));
         const lower = cleanEmail.toLowerCase();
+        
+        // Guardar siempre correo y contraseña del último usuario
+        try {
+          localStorage.setItem(LAST_USER_EMAIL_KEY, cleanEmail);
+          if (form.password) {
+            localStorage.setItem(LAST_USER_PWD_KEY, form.password);
+          }
+        } catch {}
+
         if (form.remember) {
           localStorage.setItem(`assetguard_remember_${lower}`, "true");
           localStorage.setItem(GLOBAL_REMEMBER_KEY, cleanEmail);
         } else {
           localStorage.removeItem(`assetguard_remember_${lower}`);
-          if (localStorage.getItem(GLOBAL_REMEMBER_KEY)?.toLowerCase() === lower) {
-            localStorage.removeItem(GLOBAL_REMEMBER_KEY);
-          }
         }
         setFeedback({ err: null, success: "¡Acceso concedido! Ingresando..." });
         window.dispatchEvent(new CustomEvent("assetguard:wave-start"));

@@ -655,7 +655,7 @@ export default function ScannerPage() {
     }
   };
 
-  // Procesamiento unificado de archivos seleccionados o arrastrados directamente
+  // Procesamiento unificado de archivos: ESTRICTAMENTE imágenes PNG y JPG/JPEG
   const processSelectedFile = async (file: File) => {
     setFileProcessing(true);
     setScannerError(null);
@@ -663,6 +663,20 @@ export default function ScannerPage() {
 
     const rawName = file.name || "";
     const fileName = rawName.toLowerCase();
+
+    // Validación estricta: solo PNG o JPG / JPEG
+    const isPngOrJpg =
+      file.type === "image/png" ||
+      file.type === "image/jpeg" ||
+      file.type === "image/jpg" ||
+      /\.(png|jpe?g)$/i.test(fileName);
+
+    if (!isPngOrJpg) {
+      setFileProcessing(false);
+      setScannerError("Formato no válido: Estrictamente solo se permiten imágenes en formato PNG o JPG / JPEG (.png, .jpg, .jpeg).");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     // Recopilar seriales conocidos para detección automática en nombres de archivo
     const knownSerials = Array.from(
@@ -684,111 +698,78 @@ export default function ScannerPage() {
       if (matched) detectedFromFilename = matched;
     }
 
-    // 1. Archivo de imagen: escanear QR usando html5-qrcode y canvas crop
-    if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|svg)$/i.test(fileName)) {
+    try {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      let decoded: string | null = null;
+
+      // Intento 1: Escanear la imagen directa completa
       try {
-        const { Html5Qrcode } = await import("html5-qrcode");
-        let decoded: string | null = null;
-
-        // Intento 1: Escanear la imagen directa completa
+        const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
         try {
-          const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
+          decoded = await html5QrCode.scanFile(file, false);
+        } finally {
           try {
-            decoded = await html5QrCode.scanFile(file, false);
-          } finally {
-            try {
-              html5QrCode.clear();
-            } catch {
-              // ignore
-            }
-          }
-        } catch {
-          decoded = null;
-        }
-
-        // Intento 2: Si la imagen completa no fue decodificada (por texto o composición de etiqueta), recortar el recuadro QR
-        if (!decoded) {
-          try {
-            const croppedBlob = await extractQrRegionBlob(file);
-            if (croppedBlob) {
-              const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
-              try {
-                const croppedFile = new File([croppedBlob], "cropped-qr.png", { type: "image/png" });
-                decoded = await html5QrCode.scanFile(croppedFile, false);
-              } finally {
-                try {
-                  html5QrCode.clear();
-                } catch {
-                  // ignore
-                }
-              }
-            }
+            html5QrCode.clear();
           } catch {
             // ignore
           }
         }
-
-        // Si se decodificó exitosamente el QR óptico
-        if (decoded) {
-          const ok = lookupAsset(decoded, "ARCHIVO");
-          if (ok) {
-            setFileSuccessNotice(`Código QR detectado en la imagen: ${decoded}`);
-            setFileProcessing(false);
-            return;
-          }
-        }
-
-        // Intento 3: Si falló la lectura óptica pero el archivo es una etiqueta oficial con serial en el nombre
-        if (detectedFromFilename) {
-          const ok = lookupAsset(detectedFromFilename, "ARCHIVO");
-          if (ok) {
-            setFileSuccessNotice(`Etiqueta oficial reconocida por archivo: ${detectedFromFilename}`);
-            setFileProcessing(false);
-            return;
-          }
-        }
-
-        setScannerError(
-          `No se detectó un código QR nítido en "${file.name}". Puedes arrastrar la etiqueta oficial o ingresar el serial manualmente.`
-        );
-      } catch (err: any) {
-        if (detectedFromFilename) {
-          lookupAsset(detectedFromFilename, "ARCHIVO");
-          setFileSuccessNotice(`Equipo identificado por archivo: ${detectedFromFilename}`);
-        } else {
-          setScannerError("Error al procesar la imagen del código QR.");
-        }
+      } catch {
+        decoded = null;
       }
-    }
-    // 2. Archivo de texto plano / CSV / código
-    else {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = (event.target?.result as string) || "";
-        const lines = text.split(/\r?\n/);
 
-        let foundSerial: string | null = null;
-        for (const line of lines) {
-          const upper = line.toUpperCase();
-          for (const serial of knownSerials) {
-            if (upper.includes(serial.toUpperCase())) {
-              foundSerial = serial;
-              break;
+      // Intento 2: Si la imagen completa no fue decodificada, recortar el recuadro QR
+      if (!decoded) {
+        try {
+          const croppedBlob = await extractQrRegionBlob(file);
+          if (croppedBlob) {
+            const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
+            try {
+              const croppedFile = new File([croppedBlob], "cropped-qr.png", { type: "image/png" });
+              decoded = await html5QrCode.scanFile(croppedFile, false);
+            } finally {
+              try {
+                html5QrCode.clear();
+              } catch {
+                // ignore
+              }
             }
           }
-          if (foundSerial) break;
+        } catch {
+          // ignore
         }
+      }
 
-        if (foundSerial) {
-          lookupAsset(foundSerial, "ARCHIVO");
-          setFileSuccessNotice(`Serial extraído del archivo: ${foundSerial}`);
-        } else if (lines[0]?.trim()) {
-          lookupAsset(lines[0].trim(), "ARCHIVO");
-        } else {
-          setScannerError("No se encontraron seriales válidos en el archivo.");
+      // Si se decodificó exitosamente el QR óptico
+      if (decoded) {
+        const ok = lookupAsset(decoded, "ARCHIVO");
+        if (ok) {
+          setFileSuccessNotice(`Código QR detectado en la imagen: ${decoded}`);
+          setFileProcessing(false);
+          return;
         }
-      };
-      reader.readAsText(file);
+      }
+
+      // Intento 3: Si falló la lectura óptica pero el archivo es una etiqueta oficial con serial en el nombre
+      if (detectedFromFilename) {
+        const ok = lookupAsset(detectedFromFilename, "ARCHIVO");
+        if (ok) {
+          setFileSuccessNotice(`Etiqueta oficial reconocida por archivo: ${detectedFromFilename}`);
+          setFileProcessing(false);
+          return;
+        }
+      }
+
+      setScannerError(
+        `No se detectó un código QR legible en la imagen "${file.name}". Verifica que la imagen sea nítida o ingresa el serial manualmente.`
+      );
+    } catch (err: any) {
+      if (detectedFromFilename) {
+        lookupAsset(detectedFromFilename, "ARCHIVO");
+        setFileSuccessNotice(`Equipo identificado por archivo: ${detectedFromFilename}`);
+      } else {
+        setScannerError("Error al procesar la imagen PNG/JPG del código QR.");
+      }
     }
 
     setFileProcessing(false);
@@ -1003,18 +984,18 @@ export default function ScannerPage() {
                       : "Haz clic o arrastra aquí tu etiqueta QR descargada"}
                   </p>
                   <p className="text-xs text-[#172B4D]/60 mt-1">
-                    Arrastra directamente etiquetas oficiales (.png) o imágenes con código QR
+                    Arrastra exclusivamente imágenes en formato <strong>PNG o JPG / JPEG</strong>
                   </p>
                 </div>
                 <span className="px-4 py-2 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-xs shadow-xs transition-colors">
-                  {fileProcessing ? "Analizando código..." : "Seleccionar o Arrastrar Archivo"}
+                  {fileProcessing ? "Analizando imagen..." : "Seleccionar Imagen PNG o JPG"}
                 </span>
               </div>
 
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,.txt,.csv,.pdf"
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                 onChange={handleFileUpload}
                 className="hidden"
               />
