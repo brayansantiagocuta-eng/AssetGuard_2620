@@ -28,11 +28,6 @@ const nextConfig: NextConfig = {
       { source: "/api/:path*", destination: `${backendUrl}/api/:path*` },
     ];
   },
-  experimental: {
-    agentFeedback: true,
-  },
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     rules: {
       "*.css": {

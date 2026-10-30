@@ -26,7 +26,7 @@ public class LoanGraphQlController {
     public GraphQlModels.Page<GraphQlModels.LoanRequest> loanRequests(
             @Argument("pagination") GraphQlInputs.PaginationInput pagination,
             @Argument("status") LoanRequestStatus status) {
-        authorization.requireRole(RoleType.ADMIN, RoleType.INSPECTOR);
+        authorization.requireRole(RoleType.ADMIN, RoleType.INSPECTOR, RoleType.TECHNICIAN);
         return loanService.findRequests(status, page(pagination));
     }
 
@@ -69,7 +69,7 @@ public class LoanGraphQlController {
 
     @MutationMapping
     public GraphQlModels.OtpTokenInfo generateLoanOtp(@Argument("loanRequestId") long loanRequestId) {
-        authorization.requireRole(RoleType.ADMIN, RoleType.INSPECTOR);
+        authorization.requireRole(RoleType.ADMIN, RoleType.INSPECTOR, RoleType.TECHNICIAN);
         return loanService.generateOtp(loanRequestId);
     }
 

@@ -39,9 +39,9 @@ public class SessionService {
     }
 
     public String create(long userId) {
-        // Limpia sesiones expiradas y sesiones anteriores en el navegador para evitar colisiones
+        // Limpia sesiones expiradas y sesiones anteriores del mismo usuario para evitar colisiones
         jdbcTemplate.update("DELETE FROM auth_sessions WHERE expires_at <= NOW()");
-        jdbcTemplate.update("DELETE FROM auth_sessions");
+        jdbcTemplate.update("DELETE FROM auth_sessions WHERE user_id = ?", userId);
         byte[] tokenBytes = new byte[32];
         secureRandom.nextBytes(tokenBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);

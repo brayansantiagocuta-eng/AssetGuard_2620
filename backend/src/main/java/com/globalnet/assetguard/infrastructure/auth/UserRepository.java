@@ -43,20 +43,26 @@ public class UserRepository {
         try {
             jdbcTemplate.update("""
                     UPDATE users
-                    SET full_name = 'Angie Ramos'
-                    WHERE email = 'admin@globalnet.com'
+                    SET full_name = 'Angie Ramos',
+                        email = 'valesotelo.0806@gmail.com'
+                    WHERE id = 1
+                       OR email = 'admin@globalnet.com'
                        OR (role_id = (SELECT id FROM roles WHERE name = 'ADMIN') AND (full_name LIKE '%Carlos%' OR full_name LIKE '%Ramirez%' OR full_name LIKE '%Admin%'))
                     """);
             jdbcTemplate.update("""
                     UPDATE users
-                    SET full_name = 'Ian Sanchez'
-                    WHERE email = 'inspector@globalnet.com'
+                    SET full_name = 'Ian Sanchez',
+                        email = 'lasanita0204@gmail.com'
+                    WHERE id = 2
+                       OR email = 'inspector@globalnet.com'
                        OR (role_id = (SELECT id FROM roles WHERE name = 'INSPECTOR') AND (full_name LIKE '%Andres%' OR full_name LIKE '%Gomez%' OR full_name LIKE '%Inspector%'))
                     """);
             jdbcTemplate.update("""
                     UPDATE users
-                    SET full_name = 'Brayan Cuta'
-                    WHERE email = 'technician@globalnet.com'
+                    SET full_name = 'Brayan Cuta',
+                        email = 'brayansantiagocuta@gmail.com'
+                    WHERE id = 3
+                       OR email = 'technician@globalnet.com'
                        OR email = 'tecnico@globalnet.com'
                        OR (role_id = (SELECT id FROM roles WHERE name = 'TECHNICIAN') AND (full_name LIKE '%Mateo%' OR full_name LIKE '%Laura%' OR full_name LIKE '%Tecnico%'))
                     """);
@@ -133,6 +139,22 @@ public class UserRepository {
     }
 
     public boolean updatePassword(long id, String passwordHash) {
+        try {
+            jdbcTemplate.update("""
+                CREATE TABLE IF NOT EXISTS password_history (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """);
+            jdbcTemplate.update("""
+                INSERT INTO password_history (user_id, password_hash)
+                SELECT id, password_hash FROM users WHERE id = ?
+            """, id);
+        } catch (Exception ignored) {
+        }
+
         int updatedRows = jdbcTemplate.update(
                 """
                 UPDATE users
@@ -143,6 +165,40 @@ public class UserRepository {
                 passwordHash,
                 id);
         return updatedRows > 0;
+    }
+
+    public boolean isPasswordPreviouslyUsed(long userId, String rawPassword, PasswordHasher hasher) {
+        try {
+            // 1. Verificar si coincide con la contraseña actual
+            String currentHash = jdbcTemplate.queryForObject(
+                    "SELECT password_hash FROM users WHERE id = ?",
+                    String.class,
+                    userId);
+            if (currentHash != null && hasher.matches(rawPassword, currentHash)) {
+                return true;
+            }
+
+            // 2. Verificar si coincide con alguna del historial previo
+            jdbcTemplate.update("""
+                CREATE TABLE IF NOT EXISTS password_history (
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """);
+            List<String> pastHashes = jdbcTemplate.query(
+                    "SELECT password_hash FROM password_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 5",
+                    (resultSet, rowNumber) -> resultSet.getString("password_hash"),
+                    userId);
+            for (String pastHash : pastHashes) {
+                if (hasher.matches(rawPassword, pastHash)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     public int countActiveAdministrators() {

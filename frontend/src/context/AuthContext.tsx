@@ -31,6 +31,7 @@ interface AuthContextType {
 
 interface AuthResponse {
   user: AuthUser;
+  token?: string;
 }
 
 interface ErrorResponse {
@@ -39,6 +40,10 @@ interface ErrorResponse {
 }
 
 const SESSION_USER_KEY = "assetguard_current_user";
+const TAB_USER_KEY = "assetguard_tab_user";
+const TAB_EMAIL_KEY = "assetguard_tab_email";
+const TAB_TOKEN_KEY = "assetguard_tab_token";
+const SESSION_TOKEN_KEY = "assetguard_session_token";
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isAuthUser(value: unknown): value is AuthUser {
@@ -66,14 +71,26 @@ async function getErrorMessage(response: Response, fallback: string): Promise<st
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Inicializa el usuario desde el almacenamiento local seguro para evitar cambios de cuenta o destellos al recargar
+  // Inicializa el usuario desde la sesión de esta pestaña específica (o fallback local) para que cada pestaña conserve su propia sesión al recargar
   const [user, setUser] = useState<AuthUser | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      const saved = localStorage.getItem(SESSION_USER_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      // 1. Prioridad: la sesión guardada en esta pestaña específica (sessionStorage)
+      const tabSaved = sessionStorage.getItem(TAB_USER_KEY);
+      if (tabSaved) {
+        const parsed = JSON.parse(tabSaved);
         if (isAuthUser(parsed)) return parsed;
+      }
+      // 2. Almacenamiento local si la pestaña es nueva
+      const localSaved = localStorage.getItem(SESSION_USER_KEY);
+      if (localSaved) {
+        const parsed = JSON.parse(localSaved);
+        if (isAuthUser(parsed)) {
+          // Asigna a esta pestaña para que no dependa de otras pestañas en el futuro
+          sessionStorage.setItem(TAB_USER_KEY, localSaved);
+          sessionStorage.setItem(TAB_EMAIL_KEY, parsed.email);
+          return parsed;
+        }
       }
     } catch {
       // ignore
@@ -85,62 +102,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
 
   const refreshSession = useCallback(async (): Promise<boolean> => {
+    let currentTabUser: AuthUser | null = null;
+    let tabToken: string | null = null;
+    if (typeof window !== "undefined") {
+      try {
+        const tabSaved = sessionStorage.getItem(TAB_USER_KEY);
+        if (tabSaved) {
+          const parsed = JSON.parse(tabSaved);
+          if (isAuthUser(parsed)) currentTabUser = parsed;
+        }
+        tabToken = sessionStorage.getItem(TAB_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
+      } catch {}
+    }
+
     try {
-      // Timestamp para evitar cualquier respuesta cacheada por proxies o navegador
       const response = await fetch(`/api/auth/me?_t=${Date.now()}`, {
         credentials: "same-origin",
         cache: "no-store",
         headers: {
           "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
+          Pragma: "no-cache",
+          ...(tabToken ? { Authorization: `Bearer ${tabToken}`, "X-Session-Token": tabToken } : {}),
         },
       });
 
       if (response.status === 401) {
         try {
           localStorage.removeItem(SESSION_USER_KEY);
-        } catch {
-          // ignore
-        }
+          sessionStorage.removeItem(TAB_USER_KEY);
+          localStorage.removeItem(SESSION_TOKEN_KEY);
+          sessionStorage.removeItem(TAB_TOKEN_KEY);
+        } catch {}
         setUser(null);
         setAuthError(null);
         return false;
       }
 
       if (!response.ok) {
+        if (currentTabUser) {
+          setUser(currentTabUser);
+          return true;
+        }
         throw new Error(await getErrorMessage(response, "No se pudo validar la sesión."));
       }
 
       const body = (await response.json()) as AuthResponse;
       if (!isAuthUser(body.user)) {
+        if (currentTabUser) {
+          setUser(currentTabUser);
+          return true;
+        }
         throw new Error("El servidor devolvió información de usuario no válida.");
       }
 
       setUser(body.user);
       try {
+        sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(body.user));
+        sessionStorage.setItem(TAB_EMAIL_KEY, body.user.email);
         localStorage.setItem(SESSION_USER_KEY, JSON.stringify(body.user));
-      } catch {
-        // ignore
-      }
+        if (body.token) {
+          sessionStorage.setItem(TAB_TOKEN_KEY, body.token);
+          localStorage.setItem(SESSION_TOKEN_KEY, body.token);
+        }
+      } catch {}
       setAuthError(null);
       return true;
     } catch (error) {
-      // Si hay error de conexión puntual, no borramos el usuario local de inmediato para evitar que cambie o se pierda la sesión
-      if (typeof window !== "undefined") {
-        try {
-          const cached = localStorage.getItem(SESSION_USER_KEY);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (isAuthUser(parsed)) {
-              setUser(parsed);
-              return true;
-            }
-          }
-        } catch {
-          // ignore
-        }
+      if (currentTabUser) {
+        setUser(currentTabUser);
+        return true;
       }
-
       setAuthError(
         error instanceof Error
           ? error.message
@@ -163,6 +194,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, [refreshSession]);
+
+  // Sincroniza el correo de la sesión actual en el almacenamiento privado de esta pestaña
+  useEffect(() => {
+    if (user?.email) {
+      try {
+        sessionStorage.setItem(TAB_EMAIL_KEY, user.email);
+        const emailLower = user.email.toLowerCase();
+        const isRemembered = localStorage.getItem(`assetguard_remember_${emailLower}`) === "true";
+        if (isRemembered) {
+          sessionStorage.setItem("assetguard_tab_remember", "true");
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [user]);
 
   const login = async (email: string, password: string): Promise<AuthResult> => {
     try {
@@ -190,7 +237,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(body.user);
       try {
+        sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(body.user));
+        sessionStorage.setItem(TAB_EMAIL_KEY, email.trim());
         localStorage.setItem(SESSION_USER_KEY, JSON.stringify(body.user));
+        if (body.token) {
+          sessionStorage.setItem(TAB_TOKEN_KEY, body.token);
+          localStorage.setItem(SESSION_TOKEN_KEY, body.token);
+        }
       } catch {
         // ignore
       }
@@ -206,8 +259,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async (): Promise<AuthResult> => {
     try {
+      let tabToken: string | null = null;
       try {
+        tabToken = sessionStorage.getItem(TAB_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
+
+        // Aislar y preservar el correo del usuario que cerró sesión específicamente en esta pestaña
+        const currentEmail = user?.email || (() => {
+          try {
+            const saved = sessionStorage.getItem(TAB_USER_KEY);
+            return saved ? JSON.parse(saved).email : null;
+          } catch {
+            return null;
+          }
+        })();
+
+        if (currentEmail) {
+          const emailClean = currentEmail.trim();
+          const emailLower = emailClean.toLowerCase();
+          sessionStorage.setItem(TAB_EMAIL_KEY, emailClean);
+
+          const wasTabRemembered = sessionStorage.getItem("assetguard_tab_remember") === "true";
+          const wasGlobalRemembered = localStorage.getItem(`assetguard_remember_${emailLower}`) === "true";
+          if (wasTabRemembered || wasGlobalRemembered) {
+            sessionStorage.setItem("assetguard_tab_remember", "true");
+          }
+        }
+
+        sessionStorage.removeItem(TAB_USER_KEY);
         localStorage.removeItem(SESSION_USER_KEY);
+        sessionStorage.removeItem(TAB_TOKEN_KEY);
+        localStorage.removeItem(SESSION_TOKEN_KEY);
       } catch {
         // ignore
       }
@@ -216,7 +297,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch(`/api/auth/logout?_t=${Date.now()}`, {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Cache-Control": "no-cache, no-store" },
+        headers: {
+          "Cache-Control": "no-cache, no-store",
+          ...(tabToken ? { Authorization: `Bearer ${tabToken}`, "X-Session-Token": tabToken } : {}),
+        },
       });
 
       if (!response.ok) {

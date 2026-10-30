@@ -36,15 +36,34 @@ public class SessionFilter extends OncePerRequestFilter {
         response.setHeader("Pragma", "no-cache");
         response.setHeader("Expires", "0");
 
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            // Recorre los cookies buscando el que tenga una sesión activa válida en base de datos
-            for (Cookie cookie : cookies) {
-                if (SessionService.COOKIE_NAME.equals(cookie.getName())) {
-                    Optional<AuthenticatedUser> user = sessionService.findUser(cookie.getValue());
-                    if (user.isPresent()) {
-                        request.setAttribute(USER_ATTRIBUTE, user.get());
-                        break;
+        // 1. Primero verifica token de sesión en encabezado Authorization o X-Session-Token
+        String authHeader = request.getHeader("Authorization");
+        String headerToken = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            headerToken = authHeader.substring(7).trim();
+        }
+        if (headerToken == null || headerToken.isBlank()) {
+            headerToken = request.getHeader("X-Session-Token");
+        }
+        if (headerToken != null && !headerToken.isBlank()) {
+            Optional<AuthenticatedUser> user = sessionService.findUser(headerToken);
+            if (user.isPresent()) {
+                request.setAttribute(USER_ATTRIBUTE, user.get());
+            }
+        }
+
+        // 2. Si no vino en encabezados, verifica cookies
+        if (request.getAttribute(USER_ATTRIBUTE) == null) {
+            Cookie[] cookies = request.getCookies();
+            if (cookies != null) {
+                // Recorre los cookies buscando el que tenga una sesión activa válida en base de datos
+                for (Cookie cookie : cookies) {
+                    if (SessionService.COOKIE_NAME.equals(cookie.getName())) {
+                        Optional<AuthenticatedUser> user = sessionService.findUser(cookie.getValue());
+                        if (user.isPresent()) {
+                            request.setAttribute(USER_ATTRIBUTE, user.get());
+                            break;
+                        }
                     }
                 }
             }

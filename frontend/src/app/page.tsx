@@ -73,7 +73,7 @@ export default function HomePage() {
         </h2>
       </div>
 
-      {/* Los 4 Indicadores Principales con breve descripción de la actividad */}
+      {/* Los 4 Indicadores Clave del Tablero Principal */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-white rounded-2xl p-6 border border-[#AFC8D0]/60 shadow-xs flex items-center gap-4">
           <div className="h-14 w-14 rounded-2xl bg-[#1995AD]/15 flex items-center justify-center text-[#1995AD] shrink-0">
@@ -200,7 +200,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between p-3 rounded-xl bg-red-50/70 border border-red-100">
               <div>
                 <p className="font-bold text-[#172B4D]">Viavi OneExpert ONX-580</p>
-                <p className="text-xs text-red-700">ANAL-VIAVI-ONX-003</p>
+                <p className="text-xs text-red-700">ANAL-ONX580-003</p>
               </div>
               <span className="text-xs font-extrabold text-red-700">Límite (495/500)</span>
             </div>
@@ -208,7 +208,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between p-3 rounded-xl bg-amber-50/70 border border-amber-100">
               <div>
                 <p className="font-bold text-[#172B4D]">EXFO MaxTester 730C OTDR</p>
-                <p className="text-xs text-amber-800">OTDR-MAX-730C-002</p>
+                <p className="text-xs text-amber-800">OTDR-730C-002</p>
               </div>
               <span className="text-xs font-extrabold text-amber-800">Próximo (340/500)</span>
             </div>

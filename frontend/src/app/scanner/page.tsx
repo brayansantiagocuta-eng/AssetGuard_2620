@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import QRCode from "qrcode";
 import { useQuery } from "@apollo/client/react";
 import { GET_ASSETS_QUERY } from "@/lib/graphql/queries";
 import {
@@ -21,6 +22,7 @@ import {
   ShieldCheck,
   Check,
   Layers,
+  Download,
 } from "lucide-react";
 
 export interface ScannedAssetDetails {
@@ -37,7 +39,28 @@ export interface ScannedAssetDetails {
   scannedMethod: "CAMARA" | "ARCHIVO" | "MANUAL";
 }
 
-// Catálogo completo oficial de los 15 equipos de GlobalNet Telecom
+// 5 equipos/modelos más comprados y usados de GlobalNet Telecom para pruebas
+export const TOP_5_MOST_USED_SERIALS = [
+  "FUS-90S-001",
+  "OTDR-730C-002",
+  "ANAL-ONX580-003",
+  "MIC-FIP435-004",
+  "FUS-70S-005",
+] as const;
+
+// Mapeo de compatibilidad histórica para seriales anteriores que tenían 4 segmentos o PWR
+const SERIAL_ALIASES: Record<string, string> = {
+  "OTDR-MAX-730C-002": "OTDR-730C-002",
+  "ANAL-VIAVI-ONX-003": "ANAL-ONX580-003",
+  "PWR-FIP-435B-004": "MIC-FIP435-004",
+  "FUS-INNO-V7-007": "FUS-VIEW7-007",
+  "ANAL-FLK-DSX-012": "ANAL-DSX8000-012",
+  "ANAL-ANR-MS20-013": "ANAL-MS2090-013",
+  "PWR-P5000I-014": "MIC-P5000I-014",
+  "PWR-FLK-FI7000-015": "MIC-FI7000-015",
+};
+
+// Catálogo completo oficial de los 15 equipos de GlobalNet Telecom (estandarizado a 3 partes)
 const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "scannedMethod">> = {
   "FUS-90S-001": {
     serial: "FUS-90S-001",
@@ -50,9 +73,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Bodega Principal - Calle 26 (A1)",
     estimatedValue: "$8,500.00",
   },
-  "OTDR-MAX-730C-002": {
-    serial: "OTDR-MAX-730C-002",
-    qrCode: "QR-OTDR-MAX-730C-002",
+  "OTDR-730C-002": {
+    serial: "OTDR-730C-002",
+    qrCode: "QR-OTDR-730C-002",
     model: "Reflectómetro Óptico EXFO 730C",
     category: "Reflectómetros Ópticos (OTDR)",
     status: "ON_LOAN",
@@ -61,9 +84,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Bodega Principal - Calle 26 (B2)",
     estimatedValue: "$12,000.00",
   },
-  "ANAL-VIAVI-ONX-003": {
-    serial: "ANAL-VIAVI-ONX-003",
-    qrCode: "QR-ANAL-VIAVI-ONX-003",
+  "ANAL-ONX580-003": {
+    serial: "ANAL-ONX580-003",
+    qrCode: "QR-ANAL-ONX580-003",
     model: "Analizador de Red Viavi ONX-580",
     category: "Analizadores de Red",
     status: "MAINTENANCE",
@@ -72,9 +95,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Taller Técnico Central",
     estimatedValue: "$9,200.00",
   },
-  "PWR-FIP-435B-004": {
-    serial: "PWR-FIP-435B-004",
-    qrCode: "QR-PWR-FIP-435B-004",
+  "MIC-FIP435-004": {
+    serial: "MIC-FIP435-004",
+    qrCode: "QR-MIC-FIP435-004",
     model: "Sonda de Inspección Óptica EXFO",
     category: "Microscopios de Fibra",
     status: "AVAILABLE",
@@ -105,9 +128,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Bodega Principal - Calle 26 (A3)",
     estimatedValue: "$7,800.00",
   },
-  "FUS-INNO-V7-007": {
-    serial: "FUS-INNO-V7-007",
-    qrCode: "QR-FUS-INNO-V7-007",
+  "FUS-VIEW7-007": {
+    serial: "FUS-VIEW7-007",
+    qrCode: "QR-FUS-VIEW7-007",
     model: "Fusionadora de Fibra INNO View 7",
     category: "Fusionadoras de Fibra",
     status: "AVAILABLE",
@@ -160,9 +183,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Bodega Principal - Calle 26 (C1)",
     estimatedValue: "$14,500.00",
   },
-  "ANAL-FLK-DSX-012": {
-    serial: "ANAL-FLK-DSX-012",
-    qrCode: "QR-ANAL-FLK-DSX-012",
+  "ANAL-DSX8000-012": {
+    serial: "ANAL-DSX8000-012",
+    qrCode: "QR-ANAL-DSX8000-012",
     model: "Certificador de Red Fluke DSX-8000",
     category: "Analizadores de Red",
     status: "ON_LOAN",
@@ -171,9 +194,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Bodega Principal - Calle 26 (C2)",
     estimatedValue: "$16,000.00",
   },
-  "ANAL-ANR-MS20-013": {
-    serial: "ANAL-ANR-MS20-013",
-    qrCode: "QR-ANAL-ANR-MS20-013",
+  "ANAL-MS2090-013": {
+    serial: "ANAL-MS2090-013",
+    qrCode: "QR-ANAL-MS2090-013",
     model: "Analizador de Espectro Anritsu MS2090A",
     category: "Analizadores de Red",
     status: "MAINTENANCE",
@@ -182,9 +205,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Taller Técnico Central",
     estimatedValue: "$22,000.00",
   },
-  "PWR-P5000I-014": {
-    serial: "PWR-P5000I-014",
-    qrCode: "QR-PWR-P5000I-014",
+  "MIC-P5000I-014": {
+    serial: "MIC-P5000I-014",
+    qrCode: "QR-MIC-P5000I-014",
     model: "Microscopio de Fibra Viavi P5000i",
     category: "Microscopios de Fibra",
     status: "AVAILABLE",
@@ -193,9 +216,9 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
     location: "Bodega Principal - Calle 26 (A4)",
     estimatedValue: "$3,600.00",
   },
-  "PWR-FLK-FI7000-015": {
-    serial: "PWR-FLK-FI7000-015",
-    qrCode: "QR-PWR-FLK-FI7000-015",
+  "MIC-FI7000-015": {
+    serial: "MIC-FI7000-015",
+    qrCode: "QR-MIC-FI7000-015",
     model: "Certificador de Inspección Fluke FI-7000",
     category: "Microscopios de Fibra",
     status: "AVAILABLE",
@@ -208,7 +231,48 @@ const OFFICIAL_CATALOG: Record<string, Omit<ScannedAssetDetails, "scannedAt" | "
 
 const STORAGE_KEY_HISTORY = "assetguard_scanned_fichas_history";
 
+// Función auxiliar para recortar el área donde se ubica el código QR en las etiquetas industriales
+const extractQrRegionBlob = (file: File): Promise<Blob | null> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        const canvas = document.createElement("canvas");
+        // En la etiqueta industrial (650x360), el código QR está en la zona izquierda x: 28, y: 90, w: 220, h: 220
+        const sx = Math.floor(img.width * 0.02);
+        const sy = Math.floor(img.height * 0.18);
+        const sw = Math.floor(img.width * 0.44);
+        const sh = Math.floor(img.height * 0.75);
+
+        canvas.width = Math.max(120, sw);
+        canvas.height = Math.max(120, sh);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => resolve(blob), "image/png");
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
+  });
+};
+
 export default function ScannerPage() {
+  const { data: dbAssetsData } = useQuery<any>(GET_ASSETS_QUERY, {
+    variables: { pagination: { page: 0, size: 100 } },
+    fetchPolicy: "cache-and-network",
+  });
+
   const [activeTab, setActiveTab] = useState<"CAMERA" | "FILE" | "MANUAL">("CAMERA");
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -221,37 +285,158 @@ export default function ScannerPage() {
   const [fileProcessing, setFileProcessing] = useState(false);
   const [fileSuccessNotice, setFileSuccessNotice] = useState<string | null>(null);
 
+  // Estados para Arrastrar y Soltar (Drag & Drop) de archivos QR
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+  const [showAllTestSerials, setShowAllTestSerials] = useState(false);
+
   // Lista de fichas almacenadas
   const [scannedHistory, setScannedHistory] = useState<ScannedAssetDetails[]>([]);
+  const [activeQrDataUrl, setActiveQrDataUrl] = useState<string | null>(null);
+
+  // Generar código QR real cuando cambia assetDetails
+  useEffect(() => {
+    if (assetDetails) {
+      QRCode.toDataURL(assetDetails.qrCode || assetDetails.serial, {
+        width: 300,
+        margin: 1,
+        color: { dark: "#172B4D", light: "#FFFFFF" },
+      })
+        .then(setActiveQrDataUrl)
+        .catch(() => setActiveQrDataUrl(null));
+    } else {
+      setActiveQrDataUrl(null);
+    }
+  }, [assetDetails]);
+
+  // Generar y descargar la etiqueta industrial oficial en PNG
+  const downloadQrTag = async (asset: {
+    serial: string;
+    model: string;
+    qrCode: string;
+    location: string;
+  }) => {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(asset.qrCode || asset.serial, {
+        width: 320,
+        margin: 1,
+        color: { dark: "#172B4D", light: "#FFFFFF" },
+      });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 650;
+      canvas.height = 360;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // Fondo blanco y marco industrial
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#1995AD";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+
+      // Franja superior institucional
+      ctx.fillStyle = "#172B4D";
+      ctx.fillRect(11, 11, canvas.width - 22, 60);
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 20px sans-serif";
+      ctx.fillText("GLOBALNET TELECOM", 30, 48);
+
+      ctx.fillStyle = "#A1D6E2";
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText("ETIQUETA OFICIAL DE CUSTODIA", 350, 48);
+
+      // Dibujar QR
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 28, 90, 220, 220);
+
+        // Datos técnicos
+        ctx.fillStyle = "#172B4D";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText("SERIAL / CÓDIGO DE ACTIVO:", 275, 115);
+
+        ctx.fillStyle = "#1995AD";
+        ctx.font = "bold 26px monospace";
+        ctx.fillText(asset.serial, 275, 148);
+
+        ctx.fillStyle = "#172B4D";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText("MODELO HOMOLOGADO:", 275, 185);
+
+        ctx.fillStyle = "#222222";
+        ctx.font = "bold 15px sans-serif";
+        const modelText = asset.model.length > 32 ? asset.model.slice(0, 30) + "..." : asset.model;
+        ctx.fillText(modelText, 275, 208);
+
+        ctx.fillStyle = "#172B4D";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText("UBICACIÓN / BODEGA:", 275, 245);
+
+        ctx.fillStyle = "#555555";
+        ctx.font = "14px sans-serif";
+        const locText = asset.location.length > 35 ? asset.location.slice(0, 33) + "..." : asset.location;
+        ctx.fillText(locText, 275, 268);
+
+        ctx.fillStyle = "#888888";
+        ctx.font = "italic 11px sans-serif";
+        ctx.fillText(`ID QR: ${asset.qrCode} | Válido para Inspección y Auditoría`, 275, 305);
+
+        // Descargar PNG
+        const link = document.createElement("a");
+        link.download = `etiqueta-qr-${asset.serial}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      };
+      img.src = qrDataUrl;
+    } catch (e) {
+      console.error("Error al generar la etiqueta QR", e);
+    }
+  };
 
   // Referencias para la cámara con html5-qrcode
   const qrScannerRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Cargar historial de fichas guardadas desde almacenamiento local
+  // Cargar historial de fichas guardadas desde almacenamiento local (estrictamente los 5 más usados)
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_HISTORY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setScannedHistory(parsed);
-          if (parsed.length > 0 && !assetDetails) {
-            setAssetDetails(parsed[0]);
-            setScannedResult(parsed[0].serial);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const capped = parsed.slice(0, 5);
+          setScannedHistory(capped);
+          if (!assetDetails) {
+            setAssetDetails(capped[0]);
+            setScannedResult(capped[0].serial);
           }
+          return;
         }
       }
+
+      // Si aún no hay guardados, precargar exactamente los 5 más usados para pruebas rápidas
+      const defaultTop5: ScannedAssetDetails[] = TOP_5_MOST_USED_SERIALS.map((serial) => ({
+        ...OFFICIAL_CATALOG[serial],
+        scannedAt: "08:00 AM",
+        scannedMethod: "MANUAL" as const,
+      }));
+      setScannedHistory(defaultTop5);
+      setAssetDetails(defaultTop5[0]);
+      setScannedResult(defaultTop5[0].serial);
+      localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(defaultTop5));
     } catch {
       // ignore
     }
   }, []);
 
-  // Guardar en el historial cuando cambia
+  // Guardar en el historial: solo se guardan 5 fichas de los 5 equipos más usados/escaneados
   const saveToHistory = (item: ScannedAssetDetails) => {
     setScannedHistory((prev) => {
       const filtered = prev.filter((p) => p.serial !== item.serial);
-      const updated = [item, ...filtered];
+      const updated = [item, ...filtered].slice(0, 5);
       try {
         localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(updated));
       } catch {
@@ -283,7 +468,7 @@ export default function ScannerPage() {
     });
   };
 
-  // Buscar ficha de equipo en catálogo oficial o con prefijo QR
+  // Buscar ficha de equipo en catálogo oficial o base de datos GraphQL
   const lookupAsset = (
     code: string,
     method: "CAMARA" | "ARCHIVO" | "MANUAL" = "MANUAL"
@@ -292,19 +477,49 @@ export default function ScannerPage() {
     if (clean.startsWith("QR-")) {
       clean = clean.replace("QR-", "");
     }
+    const resolvedClean = SERIAL_ALIASES[clean] || clean;
 
-    setScannedResult(clean);
+    setScannedResult(resolvedClean);
 
-    // Buscar coincidencia exacta por serial o modelo
-    let found = OFFICIAL_CATALOG[clean];
+    // 1. Buscar coincidencia exacta por serial o modelo en catálogo oficial
+    let found = OFFICIAL_CATALOG[resolvedClean] || OFFICIAL_CATALOG[clean];
     if (!found) {
       const key = Object.keys(OFFICIAL_CATALOG).find(
         (k) =>
+          k.toUpperCase() === resolvedClean ||
           k.toUpperCase() === clean ||
           OFFICIAL_CATALOG[k].qrCode.toUpperCase() === code.trim().toUpperCase() ||
-          OFFICIAL_CATALOG[k].serial.toUpperCase().includes(clean)
+          OFFICIAL_CATALOG[k].serial.toUpperCase().includes(resolvedClean)
       );
       if (key) found = OFFICIAL_CATALOG[key];
+    }
+
+    // 2. Si no se encontró en catálogo estático, buscar en los datos de la base de datos (GraphQL)
+    if (!found && dbAssetsData?.assets?.items) {
+      const dbAsset = dbAssetsData.assets.items.find(
+        (a: any) =>
+          a.serialNumber.toUpperCase() === clean ||
+          a.qrCode?.toUpperCase() === code.trim().toUpperCase() ||
+          a.serialNumber.toUpperCase().includes(clean)
+      );
+
+      if (dbAsset) {
+        found = {
+          serial: dbAsset.serialNumber,
+          qrCode: dbAsset.qrCode || `QR-${dbAsset.serialNumber}`,
+          model: dbAsset.model,
+          category: dbAsset.category?.name || "Equipo Especializado",
+          status: dbAsset.status,
+          cycles: `${dbAsset.usageCycles || 0} / ${dbAsset.maxUsageCycles || 500}`,
+          calibration: dbAsset.calibrationStatus?.isCompliant
+            ? `Vigente (Vence en ${dbAsset.calibrationStatus.daysUntilNextDue || 60} días)`
+            : "Requiere Calibración",
+          location: dbAsset.location?.name || "Bodega Principal",
+          estimatedValue: `$${Number(dbAsset.estimatedValue || 0).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+          })}`,
+        };
+      }
     }
 
     if (found) {
@@ -345,9 +560,13 @@ export default function ScannerPage() {
         await html5QrCodeInstance.start(
           { facingMode: "environment" },
           {
-            fps: 10,
-            qrbox: { width: 220, height: 220 },
-            aspectRatio: 1.0,
+            fps: 15,
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+              const qrboxSize = Math.floor(minEdge * 0.72);
+              return { width: qrboxSize, height: qrboxSize };
+            },
+            aspectRatio: 1.777778,
           },
           (decodedText: string) => {
             // Éxito al detectar un código
@@ -398,51 +617,147 @@ export default function ScannerPage() {
     };
   }, [isScanning]);
 
-  // Manejo de carga de imágenes o archivos
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Manejo de eventos de Arrastrar y Soltar (Drag & Drop)
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
 
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      setActiveTab("FILE");
+      processSelectedFile(files[0]);
+    }
+  };
+
+  // Procesamiento unificado de archivos seleccionados o arrastrados directamente
+  const processSelectedFile = async (file: File) => {
     setFileProcessing(true);
     setScannerError(null);
     setFileSuccessNotice(null);
 
-    const fileName = file.name.toLowerCase();
+    const rawName = file.name || "";
+    const fileName = rawName.toLowerCase();
 
-    // 1. Archivo de imagen: escanear QR usando html5-qrcode
+    // Recopilar seriales conocidos para detección automática en nombres de archivo
+    const knownSerials = Array.from(
+      new Set([
+        ...Object.keys(OFFICIAL_CATALOG),
+        ...(dbAssetsData?.assets?.items?.map((a: any) => a.serialNumber) || []),
+      ])
+    ).filter(Boolean);
+
+    // Detección por nombre de archivo descargado (ej: "etiqueta-qr-FUS-90S-001.png" o con serial en el nombre)
+    let detectedFromFilename: string | null = null;
+    const tagMatch = rawName.match(/etiqueta-qr-([A-Za-z0-9-_]+)/i);
+    if (tagMatch && tagMatch[1]) {
+      const candidate = tagMatch[1].trim();
+      const matched = knownSerials.find((s) => s.toUpperCase() === candidate.toUpperCase()) || candidate;
+      detectedFromFilename = matched;
+    } else {
+      const matched = knownSerials.find((s) => fileName.includes(s.toLowerCase()));
+      if (matched) detectedFromFilename = matched;
+    }
+
+    // 1. Archivo de imagen: escanear QR usando html5-qrcode y canvas crop
     if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|svg)$/i.test(fileName)) {
       try {
         const { Html5Qrcode } = await import("html5-qrcode");
-        const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
+        let decoded: string | null = null;
 
+        // Intento 1: Escanear la imagen directa completa
         try {
-          const decoded = await html5QrCode.scanFile(file, false);
-          const ok = lookupAsset(decoded, "ARCHIVO");
-          if (ok) {
-            setFileSuccessNotice(`Código QR detectado en imagen: ${decoded}`);
+          const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
+          try {
+            decoded = await html5QrCode.scanFile(file, false);
+          } finally {
+            try {
+              html5QrCode.clear();
+            } catch {
+              // ignore
+            }
           }
         } catch {
-          // Si el lector de QR no encuentra QR en la imagen, buscar el nombre de archivo si coincide con un serial
-          const matchedKey = Object.keys(OFFICIAL_CATALOG).find((k) =>
-            fileName.toUpperCase().includes(k.toUpperCase())
-          );
-          if (matchedKey) {
-            lookupAsset(matchedKey, "ARCHIVO");
-            setFileSuccessNotice(`Equipo identificado por referencia de archivo: ${matchedKey}`);
-          } else {
-            setScannerError(
-              `No se detectó un código QR nítido en "${file.name}". Puedes ingresar el serial manualmente o probar con otra imagen.`
-            );
-          }
-        } finally {
+          decoded = null;
+        }
+
+        // Intento 2: Si la imagen completa no fue decodificada (por texto o composición de etiqueta), recortar el recuadro QR
+        if (!decoded) {
           try {
-            html5QrCode.clear();
+            const croppedBlob = await extractQrRegionBlob(file);
+            if (croppedBlob) {
+              const html5QrCode = new Html5Qrcode("qr-file-detector-temp");
+              try {
+                const croppedFile = new File([croppedBlob], "cropped-qr.png", { type: "image/png" });
+                decoded = await html5QrCode.scanFile(croppedFile, false);
+              } finally {
+                try {
+                  html5QrCode.clear();
+                } catch {
+                  // ignore
+                }
+              }
+            }
           } catch {
             // ignore
           }
         }
+
+        // Si se decodificó exitosamente el QR óptico
+        if (decoded) {
+          const ok = lookupAsset(decoded, "ARCHIVO");
+          if (ok) {
+            setFileSuccessNotice(`Código QR detectado en la imagen: ${decoded}`);
+            setFileProcessing(false);
+            return;
+          }
+        }
+
+        // Intento 3: Si falló la lectura óptica pero el archivo es una etiqueta oficial con serial en el nombre
+        if (detectedFromFilename) {
+          const ok = lookupAsset(detectedFromFilename, "ARCHIVO");
+          if (ok) {
+            setFileSuccessNotice(`Etiqueta oficial reconocida por archivo: ${detectedFromFilename}`);
+            setFileProcessing(false);
+            return;
+          }
+        }
+
+        setScannerError(
+          `No se detectó un código QR nítido en "${file.name}". Puedes arrastrar la etiqueta oficial o ingresar el serial manualmente.`
+        );
       } catch (err: any) {
-        setScannerError("Error al procesar la imagen del código QR.");
+        if (detectedFromFilename) {
+          lookupAsset(detectedFromFilename, "ARCHIVO");
+          setFileSuccessNotice(`Equipo identificado por archivo: ${detectedFromFilename}`);
+        } else {
+          setScannerError("Error al procesar la imagen del código QR.");
+        }
       }
     }
     // 2. Archivo de texto plano / CSV / código
@@ -452,12 +767,11 @@ export default function ScannerPage() {
         const text = (event.target?.result as string) || "";
         const lines = text.split(/\r?\n/);
 
-        // Buscar si alguna línea contiene uno de los seriales oficiales
         let foundSerial: string | null = null;
         for (const line of lines) {
           const upper = line.toUpperCase();
-          for (const serial of Object.keys(OFFICIAL_CATALOG)) {
-            if (upper.includes(serial)) {
+          for (const serial of knownSerials) {
+            if (upper.includes(serial.toUpperCase())) {
               foundSerial = serial;
               break;
             }
@@ -481,6 +795,14 @@ export default function ScannerPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // Manejo de carga de imágenes o archivos vía input file
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processSelectedFile(file);
+    }
+  };
+
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualCode) {
@@ -491,7 +813,11 @@ export default function ScannerPage() {
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Contenedor temporal oculto para decodificar imágenes de archivo */}
-      <div id="qr-file-detector-temp" className="hidden" aria-hidden="true" />
+      <div
+        id="qr-file-detector-temp"
+        className="absolute -left-[9999px] -top-[9999px] w-[300px] h-[300px] opacity-0 pointer-events-none overflow-hidden"
+        aria-hidden="true"
+      />
 
       {/* Encabezado Principal */}
       <div className="bg-white p-6 sm:p-7 rounded-3xl border border-[#AFC8D0]/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -520,7 +846,27 @@ export default function ScannerPage() {
       {/* Grid de 2 Columnas: Lector/Cámara (Izq) y Ficha Técnica Activa (Der) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* COLUMNA IZQUIERDA: Modos de Captura (7 cols) */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border border-[#AFC8D0]/60 p-6 space-y-5 shadow-xs">
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className="lg:col-span-7 bg-white rounded-3xl border border-[#AFC8D0]/60 p-6 space-y-5 shadow-xs relative overflow-hidden"
+        >
+          {/* Superposición interactiva al arrastrar cualquier archivo o etiqueta QR */}
+          {isDragging && (
+            <div className="absolute inset-0 z-40 bg-[#172B4D]/90 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center text-white border-4 border-dashed border-[#A1D6E2] rounded-3xl animate-in fade-in duration-150">
+              <div className="h-20 w-20 rounded-3xl bg-[#1995AD]/40 border-2 border-[#A1D6E2] flex items-center justify-center mb-3 animate-bounce">
+                <QrCode className="h-10 w-10 text-[#A1D6E2]" />
+              </div>
+              <p className="font-title text-2xl font-black text-white">
+                ¡Suelta aquí tu etiqueta QR descargada!
+              </p>
+              <p className="text-xs sm:text-sm text-[#A1D6E2] max-w-sm mt-1">
+                AssetGuard leerá automáticamente el código o serial y desplegará la ficha técnica del equipo.
+              </p>
+            </div>
+          )}
           {/* Pestañas de modo */}
           <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-[#F1F1F2] border border-[#AFC8D0]/40">
             <button
@@ -631,21 +977,37 @@ export default function ScannerPage() {
             <div className="space-y-4">
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-[#1995AD]/60 rounded-3xl p-8 bg-[#F1F1F2]/60 hover:bg-[#A1D6E2]/20 hover:border-[#1995AD] transition-all flex flex-col items-center justify-center text-center cursor-pointer space-y-3"
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-3xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer space-y-3 ${
+                  isDragging
+                    ? "border-[#1995AD] bg-[#A1D6E2]/35 scale-[1.01] ring-4 ring-[#1995AD]/20"
+                    : "border-[#1995AD]/60 bg-[#F1F1F2]/60 hover:bg-[#A1D6E2]/20 hover:border-[#1995AD]"
+                }`}
               >
-                <div className="h-16 w-16 rounded-2xl bg-[#1995AD]/15 text-[#1995AD] flex items-center justify-center">
+                <div
+                  className={`h-16 w-16 rounded-2xl flex items-center justify-center transition-all ${
+                    isDragging
+                      ? "bg-[#1995AD] text-white scale-110 shadow-md"
+                      : "bg-[#1995AD]/15 text-[#1995AD]"
+                  }`}
+                >
                   <FileImage className="h-8 w-8" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-[#172B4D]">
-                    Haz clic o arrastra aquí tu imagen o archivo
+                    {isDragging
+                      ? "¡Suelta la etiqueta QR aquí!"
+                      : "Haz clic o arrastra aquí tu etiqueta QR descargada"}
                   </p>
                   <p className="text-xs text-[#172B4D]/60 mt-1">
-                    Soporta imágenes con código QR (.png, .jpg, .webp) o documentos con seriales (.txt, .csv)
+                    Arrastra directamente etiquetas oficiales (.png) o imágenes con código QR
                   </p>
                 </div>
-                <span className="px-4 py-2 rounded-xl bg-[#1995AD] text-white font-bold text-xs shadow-xs">
-                  {fileProcessing ? "Analizando código..." : "Seleccionar Archivo"}
+                <span className="px-4 py-2 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-xs shadow-xs transition-colors">
+                  {fileProcessing ? "Analizando código..." : "Seleccionar o Arrastrar Archivo"}
                 </span>
               </div>
 
@@ -701,13 +1063,22 @@ export default function ScannerPage() {
             </div>
           )}
 
-          {/* Catálogo de Acceso Rápido (1 clic) */}
+          {/* Catálogo de Acceso Rápido (1 clic) — Solo 5 más usados por defecto */}
           <div className="pt-2 border-t border-[#AFC8D0]/40 space-y-2">
-            <span className="text-xs font-bold text-[#172B4D]/70 uppercase tracking-wider block">
-              Pruebas Rápidas del Catálogo Oficial
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#172B4D]/70 uppercase tracking-wider block">
+                Pruebas Rápidas: 5 más usados
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAllTestSerials(!showAllTestSerials)}
+                className="text-[11px] font-bold text-[#1995AD] hover:underline cursor-pointer"
+              >
+                {showAllTestSerials ? "Ver Top 5" : "Mostrar todos"}
+              </button>
+            </div>
             <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-              {Object.keys(OFFICIAL_CATALOG).map((serial) => (
+              {(showAllTestSerials ? Object.keys(OFFICIAL_CATALOG) : TOP_5_MOST_USED_SERIALS).map((serial) => (
                 <button
                   key={serial}
                   type="button"
@@ -825,6 +1196,41 @@ export default function ScannerPage() {
                 </div>
               </div>
 
+              {/* Bloque Oficial de Generación y Descarga de Etiqueta QR */}
+              <div className="bg-[#F1F1F2]/80 border-2 border-[#1995AD]/40 p-4 rounded-2xl flex flex-col sm:flex-row items-center gap-4 shadow-xs">
+                {activeQrDataUrl ? (
+                  <img
+                    src={activeQrDataUrl}
+                    alt={`Código QR ${assetDetails.serial}`}
+                    className="h-28 w-28 rounded-xl border border-[#AFC8D0]/60 p-1.5 bg-white shrink-0 shadow-xs"
+                  />
+                ) : (
+                  <div className="h-28 w-28 rounded-xl bg-white border border-[#AFC8D0]/60 flex items-center justify-center shrink-0">
+                    <QrCode className="h-10 w-10 text-[#1995AD]" />
+                  </div>
+                )}
+                <div className="space-y-2 text-center sm:text-left flex-1">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-[#1995AD] tracking-wider block">
+                      ETIQUETA QR INDUSTRIAL
+                    </span>
+                    <h4 className="text-sm font-extrabold text-[#172B4D]">
+                      Código QR: {assetDetails.qrCode}
+                    </h4>
+                    <p className="text-xs text-[#172B4D]/65 mt-0.5">
+                      Generada dinámicamente con serial y metadatos oficiales para custodia física.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => downloadQrTag(assetDetails)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" /> Descargar Etiqueta QR (PNG)
+                  </button>
+                </div>
+              </div>
+
               {/* Meta de escaneo */}
               <div className="flex items-center justify-between text-xs text-[#172B4D]/60 px-1">
                 <span className="flex items-center gap-1">
@@ -847,7 +1253,7 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {/* SECCIÓN INFERIOR: Fichas Técnicas Almacenadas (Historial Permanente) */}
+      {/* SECCIÓN INFERIOR: Fichas Técnicas Almacenadas (Historial de Pruebas: 5 más usados) */}
       <div className="bg-white rounded-3xl border border-[#AFC8D0]/60 p-6 space-y-4 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#AFC8D0]/40 pb-3">
           <div className="flex items-center gap-2.5">
@@ -855,9 +1261,14 @@ export default function ScannerPage() {
               <Layers className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="font-title text-xl text-[#172B4D]">Fichas Técnicas Almacenadas</h3>
-              <p className="text-xs text-[#172B4D]/60">
-                Historial persistente de equipos escaneados para consulta rápida
+              <div className="flex items-center gap-2">
+                <h3 className="font-title text-xl text-[#172B4D]">Fichas Técnicas Almacenadas</h3>
+                <span className="text-[11px] font-bold bg-[#A1D6E2]/40 text-[#172B4D] px-2.5 py-0.5 rounded-full border border-[#1995AD]/30">
+                  5 más usados
+                </span>
+              </div>
+              <p className="text-xs text-[#172B4D]/60 mt-0.5">
+                Tarjetas de acceso rápido para pruebas: guarda solo 5 de los equipos más usados para consultar su ficha técnica o descargar su etiqueta QR en 1 clic.
               </p>
             </div>
           </div>
@@ -902,14 +1313,27 @@ export default function ScannerPage() {
                     <span className="font-mono text-xs font-bold text-[#1995AD] bg-white px-2 py-0.5 rounded-md border border-[#AFC8D0]/50">
                       {item.serial}
                     </span>
-                    <button
-                      type="button"
-                      title="Eliminar de historial"
-                      onClick={(e) => handleRemoveHistoryItem(item.serial, e)}
-                      className="p-1 text-[#BCBABE] hover:text-red-600 rounded-lg cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        title="Descargar Etiqueta QR"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadQrTag(item);
+                        }}
+                        className="p-1 text-[#1995AD] hover:bg-[#A1D6E2]/30 rounded-lg cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Eliminar de historial"
+                        onClick={(e) => handleRemoveHistoryItem(item.serial, e)}
+                        className="p-1 text-[#BCBABE] hover:text-red-600 rounded-lg cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <h4 className="text-sm font-bold text-[#172B4D] line-clamp-1">{item.model}</h4>

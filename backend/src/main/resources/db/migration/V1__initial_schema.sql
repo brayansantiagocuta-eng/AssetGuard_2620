@@ -174,7 +174,10 @@ CREATE INDEX IF NOT EXISTS idx_job_executions_name_date ON job_executions(job_na
 
 -- =============================================================================
 -- SEED DATA
--- Password: Password123!
+-- Default Passwords:
+-- Admin: lasanita
+-- Inspector: #12345!
+-- Technician: 123456
 -- =============================================================================
 
 INSERT INTO roles (id, name, description) VALUES
@@ -184,9 +187,9 @@ INSERT INTO roles (id, name, description) VALUES
 ON CONFLICT (id) DO UPDATE SET description = EXCLUDED.description;
 
 INSERT INTO users (id, role_id, full_name, email, password_hash, status) VALUES
-(1, 1, 'Angie Ramos', 'admin@globalnet.com', '$2a$10$.jWEMfq4mYpa2lzV0DUFPeezS65eRSANFPaRGb/o5IhP815UhhR1K', 'ACTIVE'),
-(2, 2, 'Ian Sanchez', 'inspector@globalnet.com', '$2a$10$.jWEMfq4mYpa2lzV0DUFPeezS65eRSANFPaRGb/o5IhP815UhhR1K', 'ACTIVE'),
-(3, 3, 'Brayan Cuta', 'technician@globalnet.com', '$2a$10$.jWEMfq4mYpa2lzV0DUFPeezS65eRSANFPaRGb/o5IhP815UhhR1K', 'ACTIVE')
+(1, 1, 'Angie Ramos', 'valesotelo.0806@gmail.com', '$2a$10$hiR.kFIQNwuboattDIKUqOKXP0DvbRNGXJ6vYHoqJPvXNGpY7NHPK', 'ACTIVE'),
+(2, 2, 'Ian Sanchez', 'lasanita0204@gmail.com', '$2a$10$nmtBgSLrgCv/eBwZawAvX.cpW5tEVmo2mYRYMFdFciEc6nHgj0Ayi', 'ACTIVE'),
+(3, 3, 'Brayan Cuta', 'brayansantiagocuta@gmail.com', '$2a$10$nYioptVB1Ep2ZJFis8eZU.tATD8fv0T6RSpwFElt8jRIM73bn6D2C', 'ACTIVE')
 ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO categories (id, name, useful_life_months) VALUES

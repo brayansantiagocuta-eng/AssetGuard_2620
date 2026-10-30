@@ -67,7 +67,7 @@ export function AuthNavigationGuard({ children }: { children: ReactNode }) {
       router.replace("/login");
       return;
     }
-    // Validación de permisos por Rol (HU-002 Condición 03)
+    // Validación de permisos por Rol
     if (user && role && pathname !== "/login") {
       const matchedPrefix = Object.keys(ROLE_ALLOWED_ROUTES)
         .filter((route) => route !== "/")

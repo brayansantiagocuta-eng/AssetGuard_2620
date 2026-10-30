@@ -51,24 +51,68 @@ public class UserService {
             throw ApiException.badRequest("Los datos del usuario son obligatorios.");
         }
         String fullName = required(input.fullName(), "El nombre completo es obligatorio.");
-        String email = required(input.email(), "El correo es obligatorio.").toLowerCase(Locale.ROOT);
+        String email = required(input.email(), "El correo es obligatorio.").toLowerCase(Locale.ROOT).trim();
         String password = required(input.password(), "La contraseña es obligatoria.");
-        if (!email.contains("@") || email.startsWith("@") || email.endsWith("@")) {
-            throw ApiException.badRequest("El correo no es válido.");
-        }
+        
+        validateEmail(email);
+
         if (password.length() < 6 || password.length() > 20) {
             throw ApiException.badRequest("La contraseña debe tener entre 6 y 20 caracteres.");
+        }
+        if (!password.matches(".*[A-Z].*")
+                || !password.matches(".*[a-z].*")
+                || !password.matches(".*[0-9].*")
+                || !password.matches(".*[@#$*_\\-!%&.?+=/()\\[\\]{}|~^:;<>].*")) {
+            throw ApiException.badRequest("La contraseña debe combinar mayúsculas (A-Z), minúsculas (a-z), números (0-9) y símbolos especiales.");
         }
         if (input.role() == null) {
             throw ApiException.badRequest("El rol es obligatorio.");
         }
         if (userRepository.emailExists(email)) {
-            throw ApiException.conflict("El correo ya está registrado.");
+            throw ApiException.conflict("Esta dirección de correo ya se encuentra registrada en el sistema.");
         }
 
         long id = userRepository.create(fullName, email, passwordHasher.hashBcrypt(password), input.role().name());
         auditService.record("CREATE_USER", "users", id, null, "{\"email\":\"" + email + "\"}");
         return findById(id);
+    }
+
+    private void validateEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw ApiException.badRequest("El correo electrónico es obligatorio.");
+        }
+        if (email.contains(" ")) {
+            throw ApiException.badRequest("El correo electrónico no puede contener espacios en blanco.");
+        }
+        String[] parts = email.split("@", -1);
+        if (parts.length != 2) {
+            throw ApiException.badRequest("El correo debe contener exactamente un símbolo '@'.");
+        }
+        String local = parts[0];
+        String domain = parts[1];
+
+        if (local.length() < 3) {
+            throw ApiException.badRequest("El nombre de usuario antes del '@' debe tener al menos 3 caracteres.");
+        }
+        if (local.startsWith(".") || local.endsWith(".")) {
+            throw ApiException.badRequest("El nombre de usuario no puede iniciar ni finalizar con un punto.");
+        }
+        if (local.contains("..")) {
+            throw ApiException.badRequest("El nombre de usuario no puede contener dos puntos seguidos (..).");
+        }
+        if (!local.matches("^[a-zA-Z0-9._-]+$")) {
+            throw ApiException.badRequest("El nombre de usuario contiene caracteres especiales prohibidos (no use #, $, %, &, *, paréntesis o espacios).");
+        }
+        if (local.matches("^[0-9]+$")) {
+            throw ApiException.badRequest("El nombre de usuario no puede ser solo un número; use un nombre profesional o alias claro.");
+        }
+
+        if (domain.isBlank() || !domain.contains(".") || domain.startsWith(".") || domain.endsWith(".")) {
+            throw ApiException.badRequest("El dominio del correo debe ser válido y contener una extensión (ej. @globalnet.com, @gmail.com).");
+        }
+        if (domain.contains("..") || !domain.matches("^[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")) {
+            throw ApiException.badRequest("El dominio del correo no tiene un formato válido.");
+        }
     }
 
     @Transactional
@@ -113,8 +157,14 @@ public class UserService {
         if (password.length() < 6 || password.length() > 20) {
             throw ApiException.badRequest("La contraseña debe tener entre 6 y 20 caracteres.");
         }
-        if (!password.matches("^[a-zA-Z0-9$!#%&]+$")) {
-            throw ApiException.badRequest("La contraseña solo permite letras, números y signos ($!#%&).");
+        if (!password.matches(".*[A-Z].*")
+                || !password.matches(".*[a-z].*")
+                || !password.matches(".*[0-9].*")
+                || !password.matches(".*[@#$*_\\-!%&.?+=/()\\[\\]{}|~^:;<>].*")) {
+            throw ApiException.badRequest("La contraseña debe combinar mayúsculas (A-Z), minúsculas (a-z), números (0-9) y símbolos especiales.");
+        }
+        if (userRepository.isPasswordPreviouslyUsed(id, password, passwordHasher)) {
+            throw ApiException.badRequest("No puedes reutilizar una contraseña anterior. Por seguridad, ingresa una clave nueva.");
         }
         userRepository.updatePassword(id, passwordHasher.hashBcrypt(password));
         auditService.record(

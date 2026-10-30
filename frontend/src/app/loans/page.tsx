@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useAuth } from "@/context/AuthContext";
+import { CustomSelect, SelectOption } from "@/components/ui/CustomSelect";
 import {
   GET_LOAN_REQUESTS_QUERY,
   GET_MY_LOAN_HISTORY_QUERY,
@@ -67,7 +68,7 @@ const INITIAL_FALLBACK_LOANS: UnifiedLoanItem[] = [
   {
     id: "LOAN-102",
     loanId: "2",
-    assetSerial: "OTDR-MAX-730C-002",
+    assetSerial: "OTDR-730C-002",
     assetModel: "Reflectómetro Óptico EXFO 730C",
     technicianName: "Brayan Cuta",
     status: "ACTIVE",
@@ -79,7 +80,7 @@ const INITIAL_FALLBACK_LOANS: UnifiedLoanItem[] = [
   {
     id: "LOAN-103",
     loanId: "3",
-    assetSerial: "ANAL-VIAVI-ONX-003",
+    assetSerial: "ANAL-ONX580-003",
     assetModel: "Analizador de Red Viavi ONX-580",
     technicianName: "Brayan Cuta",
     status: "OVERDUE",
@@ -103,7 +104,6 @@ export default function LoansPage() {
     refetch: refetchRequests,
   } = useQuery<any>(GET_LOAN_REQUESTS_QUERY, {
     variables: { pagination: { page: 0, size: 50 } },
-    skip: isTechnician,
     fetchPolicy: "cache-and-network",
   });
 
@@ -140,6 +140,25 @@ export default function LoansPage() {
   const [selectedOtpLoan, setSelectedOtpLoan] = useState<UnifiedLoanItem | null>(null);
   const [selectedValidationLoan, setSelectedValidationLoan] = useState<UnifiedLoanItem | null>(null);
   const [selectedReturnLoan, setSelectedReturnLoan] = useState<UnifiedLoanItem | null>(null);
+
+  const loanRequestModalBodyRef = useRef<HTMLDivElement>(null);
+
+  // Bloqueo de scroll de fondo mientras un modal de préstamos esté abierto
+  useEffect(() => {
+    const hasModal =
+      isRequestModalOpen ||
+      !!selectedOtpLoan ||
+      !!selectedValidationLoan ||
+      !!selectedReturnLoan;
+    if (hasModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isRequestModalOpen, selectedOtpLoan, selectedValidationLoan, selectedReturnLoan]);
 
   // Formulario Solicitud
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
@@ -182,8 +201,9 @@ export default function LoansPage() {
 
   // Sincronizar datos GraphQL recibidos con la lista mostrada
   useEffect(() => {
+    const list: UnifiedLoanItem[] = [];
     if (requestsData?.loanRequests?.items && requestsData.loanRequests.items.length > 0) {
-      const mapped: UnifiedLoanItem[] = requestsData.loanRequests.items.map((r: any) => ({
+      const mappedRequests: UnifiedLoanItem[] = requestsData.loanRequests.items.map((r: any) => ({
         id: `REQ-${r.id}`,
         loanRequestId: String(r.id),
         loanId: r.loan?.id ? String(r.loan.id) : undefined,
@@ -197,32 +217,57 @@ export default function LoansPage() {
         otpCode: r.activeOtp?.pin || undefined,
         otpSecondsRemaining: r.activeOtp ? 300 : 0,
       }));
-      setLocalLoans(mapped);
-    } else if (historyData?.myLoanHistory?.items && historyData.myLoanHistory.items.length > 0) {
-      const mapped: UnifiedLoanItem[] = historyData.myLoanHistory.items.map((l: any) => ({
-        id: `LOAN-${l.id}`,
-        loanId: String(l.id),
-        assetSerial: l.asset?.serialNumber || "N/A",
-        assetModel: l.asset?.model || "Equipo de Telecomunicaciones",
-        technicianName: user?.fullName || "Técnico",
-        status: l.status as any,
-        expectedReturnDate: l.actualReturnDate || "2026-10-30",
-        motive: l.notes || "Custodia técnica operativa",
-        otpSecondsRemaining: 0,
-      }));
-      setLocalLoans(mapped);
+      list.push(...mappedRequests);
+    }
+    if (historyData?.myLoanHistory?.items && historyData.myLoanHistory.items.length > 0) {
+      const mappedHistory: UnifiedLoanItem[] = historyData.myLoanHistory.items
+        .filter((l: any) => !list.some((existing) => existing.loanId === String(l.id)))
+        .map((l: any) => ({
+          id: `LOAN-${l.id}`,
+          loanId: String(l.id),
+          assetSerial: l.asset?.serialNumber || "N/A",
+          assetModel: l.asset?.model || "Equipo de Telecomunicaciones",
+          technicianName: user?.fullName || "Técnico",
+          status: l.status as any,
+          expectedReturnDate: l.actualReturnDate || "2026-10-30",
+          motive: l.notes || "Custodia técnica operativa",
+          otpSecondsRemaining: 0,
+        }));
+      list.push(...mappedHistory);
+    }
+    if (list.length > 0) {
+      setLocalLoans((prev) => {
+        // Preservar cualquier ítem creado localmente de forma optimista mientras el backend actualiza
+        const localOptimistic = prev.filter(
+          (p) => !list.some((item) => item.id === p.id || (p.loanRequestId && item.loanRequestId === p.loanRequestId))
+        );
+        return [...localOptimistic, ...list];
+      });
     }
   }, [requestsData, historyData, user?.fullName]);
 
   const availableAssetsList = useMemo(() => {
-    return availableAssetsData?.assets?.items || [
-      { id: "1", serialNumber: "FUS-90S-001", model: "Fusionadora de Fibra Fujikura 90S+" },
-      { id: "2", serialNumber: "OTDR-MAX-730C-002", model: "Reflectómetro Óptico EXFO 730C" },
-      { id: "3", serialNumber: "ANAL-VIAVI-ONX-003", model: "Analizador de Red Viavi ONX-580" },
-      { id: "4", serialNumber: "PWR-FIP-435B-004", model: "Sonda de Inspección Óptica EXFO" },
-      { id: "5", serialNumber: "FUS-70S-005", model: "Fusionadora de Fibra Fujikura 70S" },
+    const backendItems = availableAssetsData?.assets?.items;
+    if (Array.isArray(backendItems) && backendItems.length > 0) {
+      return backendItems;
+    }
+    return [
+      { id: "1", serialNumber: "FS-70S-99201", model: "Fujikura 70S+ Core-Alignment Fusion Splicer" },
+      { id: "2", serialNumber: "SA-MS2090A-102", model: "Anritsu Field Master Pro MS2090A 54 GHz" },
+      { id: "3", serialNumber: "NC-DSX8000-551", model: "Fluke Networks DSX-8000 CableAnalyzer Cat 8" },
+      { id: "4", serialNumber: "MIC-FIP435-004", model: "Sonda de Inspección Óptica EXFO" },
+      { id: "5", serialNumber: "FS-90S-33412", model: "Fujikura 90S+ High Precision Splicer" },
     ];
   }, [availableAssetsData]);
+
+  const availableAssetOptions: SelectOption[] = useMemo(() => [
+    { value: "", label: "-- Selecciona un equipo disponible --" },
+    ...availableAssetsList.map((asset: any) => ({
+      value: String(asset.id),
+      label: `${asset.serialNumber} — ${asset.model}`,
+      description: "Disponible para asignación inmediata",
+    })),
+  ], [availableAssetsList]);
 
   const filteredLoans = useMemo(() => {
     return localLoans.filter((item) => {
@@ -244,13 +289,22 @@ export default function LoansPage() {
     });
   }, [localLoans, searchQuery, filterStatus]);
 
+  const filterCounts = useMemo(() => ({
+    TODOS: localLoans.length,
+    SOLICITADOS: localLoans.filter((l) => l.status === "REQUESTED").length,
+    APROBADOS: localLoans.filter((l) => l.status === "APPROVED").length,
+    ACTIVOS: localLoans.filter((l) => l.status === "ACTIVE").length,
+    EN_MORA: localLoans.filter((l) => l.status === "OVERDUE").length,
+    DEVUELTOS: localLoans.filter((l) => l.status === "RETURNED").length,
+  }), [localLoans]);
+
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  // Crear nueva solicitud de préstamo
+  // Crear nueva solicitud de préstamo con actualización instantánea (Técnico)
   const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     setRequestError(null);
@@ -260,47 +314,69 @@ export default function LoansPage() {
       return;
     }
 
+    const chosenAsset = availableAssetsList.find((a: any) => String(a.id) === String(selectedAssetId));
+    const tempId = Date.now().toString();
+    const optimisticItem: UnifiedLoanItem = {
+      id: `REQ-${tempId.slice(-4)}`,
+      loanRequestId: tempId,
+      assetSerial: chosenAsset?.serialNumber || "EQUIPO-NUEVO",
+      assetModel: chosenAsset?.model || "Equipo de Telecomunicaciones",
+      technicianName: user?.fullName || "Brayan Cuta",
+      status: "REQUESTED",
+      requestDate: requiredDate,
+      expectedReturnDate,
+      motive: requestMotive || "Asignación de campo en red de fibra",
+      otpSecondsRemaining: 0,
+    };
+
+    // 1. Inserción inmediata y visible al instante para el técnico
+    setLocalLoans((prev) => [optimisticItem, ...prev.filter((l) => l.id !== optimisticItem.id)]);
+    setIsRequestModalOpen(false);
+    setNotice({
+      message: `¡Solicitud registrada de inmediato para ${optimisticItem.assetModel}!`,
+      type: "success",
+    });
+
+    const assetIdToSubmit = selectedAssetId;
+    const motiveToSubmit = requestMotive;
+    setSelectedAssetId("");
+    setRequestMotive("");
+
     try {
-      await createLoanRequestMutation({
+      const res = await createLoanRequestMutation({
         variables: {
           input: {
-            assetId: selectedAssetId,
+            assetId: assetIdToSubmit,
             requiredDate,
             expectedReturnDate,
-            motive: requestMotive || "Asignación de campo en red de fibra",
+            motive: motiveToSubmit || "Asignación de campo en red de fibra",
           },
         },
       });
 
-      setNotice({
-        message: "¡Solicitud de préstamo registrada exitosamente!",
-        type: "success",
-      });
-      setIsRequestModalOpen(false);
-      setSelectedAssetId("");
-      setRequestMotive("");
+      const dataObj = res?.data as any;
+      if (dataObj?.createLoanRequest) {
+        const created = dataObj.createLoanRequest;
+        const realId = String(created.id);
+        setLocalLoans((prev) =>
+          prev.map((item) =>
+            item.id === optimisticItem.id
+              ? {
+                  ...item,
+                  id: `REQ-${realId}`,
+                  loanRequestId: realId,
+                  assetSerial: created.asset?.serialNumber || item.assetSerial,
+                  assetModel: created.asset?.model || item.assetModel,
+                }
+              : item
+          )
+        );
+      }
+
       if (refetchRequests) refetchRequests();
       if (refetchHistory) refetchHistory();
     } catch (err: any) {
-      // Fallback local simulado si el backend está en proceso de reconexión
-      const chosenAsset = availableAssetsList.find((a: any) => String(a.id) === String(selectedAssetId));
-      const newSimulated: UnifiedLoanItem = {
-        id: `REQ-${Date.now().toString().slice(-4)}`,
-        loanRequestId: Date.now().toString(),
-        assetSerial: chosenAsset?.serialNumber || "EQUIPO-NUEVO",
-        assetModel: chosenAsset?.model || "Equipo de Telecomunicaciones",
-        technicianName: user?.fullName || "Brayan Cuta",
-        status: "REQUESTED",
-        expectedReturnDate,
-        motive: requestMotive || "Asignación técnica de campo",
-        otpSecondsRemaining: 0,
-      };
-      setLocalLoans((prev) => [newSimulated, ...prev]);
-      setNotice({
-        message: "Solicitud registrada (Modo sincronizado en sesión local)",
-        type: "success",
-      });
-      setIsRequestModalOpen(false);
+      // Si la llamada falla o hay error de red, la solicitud optimista permanece visible en sesión
     }
   };
 
@@ -356,7 +432,7 @@ export default function LoansPage() {
         const res = await generateLoanOtpMutation({
           variables: { loanRequestId: item.loanRequestId },
         });
-        const pin = res?.data?.generateLoanOtp?.pin || "839201";
+        const pin = (res?.data as { generateLoanOtp?: { pin?: string } })?.generateLoanOtp?.pin || "839201";
         const updated = { ...item, otpCode: pin, otpSecondsRemaining: 300 };
         setLocalLoans((prev) => prev.map((l) => (l.id === item.id ? updated : l)));
         setSelectedOtpLoan(updated);
@@ -551,29 +627,40 @@ export default function LoansPage() {
           />
         </div>
 
-        {/* Selector de estados */}
+        {/* Selector de estados: Compacto, diferenciado por color y con contadores */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           {[
-            { label: "Todos", value: "TODOS" },
-            { label: "Solicitados", value: "SOLICITADOS" },
-            { label: "Aprobados", value: "APROBADOS" },
-            { label: "Activos", value: "ACTIVOS" },
-            { label: "En Mora", value: "EN_MORA" },
-            { label: "Devueltos", value: "DEVUELTOS" },
-          ].map((pill) => (
-            <button
-              key={pill.value}
-              type="button"
-              onClick={() => setFilterStatus(pill.value)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
-                filterStatus === pill.value
-                  ? "bg-[#1995AD] text-white shadow-xs"
-                  : "bg-[#F1F1F2] text-[#172B4D]/75 hover:bg-[#A1D6E2]/40"
-              }`}
-            >
-              {pill.label}
-            </button>
-          ))}
+            { label: "Todos", value: "TODOS", count: filterCounts.TODOS, activeBg: "bg-[#172B4D] text-white", dot: "bg-slate-400" },
+            { label: "Solicitados", value: "SOLICITADOS", count: filterCounts.SOLICITADOS, activeBg: "bg-purple-600 text-white", dot: "bg-purple-500" },
+            { label: "Aprobados", value: "APROBADOS", count: filterCounts.APROBADOS, activeBg: "bg-amber-600 text-white", dot: "bg-amber-500" },
+            { label: "Activos", value: "ACTIVOS", count: filterCounts.ACTIVOS, activeBg: "bg-[#1995AD] text-white", dot: "bg-[#1995AD]" },
+            { label: "En Mora", value: "EN_MORA", count: filterCounts.EN_MORA, activeBg: "bg-red-600 text-white", dot: "bg-red-500" },
+            { label: "Devueltos", value: "DEVUELTOS", count: filterCounts.DEVUELTOS, activeBg: "bg-emerald-600 text-white", dot: "bg-emerald-500" },
+          ].map((pill) => {
+            const isSelected = filterStatus === pill.value;
+            return (
+              <button
+                key={pill.value}
+                type="button"
+                onClick={() => setFilterStatus(pill.value)}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 border ${
+                  isSelected
+                    ? `${pill.activeBg} border-transparent shadow-xs scale-[1.02]`
+                    : "bg-[#F1F1F2] text-[#172B4D]/80 border-[#AFC8D0]/40 hover:bg-[#AFC8D0]/30"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? "bg-white" : pill.dot}`} />
+                <span>{pill.label}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                    isSelected ? "bg-white/25 text-white" : "bg-[#AFC8D0]/50 text-[#172B4D]"
+                  }`}
+                >
+                  {pill.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -599,14 +686,30 @@ export default function LoansPage() {
             return (
               <div
                 key={item.id}
-                className="bg-white rounded-2xl border border-[#AFC8D0]/60 p-5 flex flex-col md:flex-row md:items-center justify-between gap-5 hover:border-[#1995AD] transition-all shadow-xs"
+                className="bg-white rounded-2xl border border-[#AFC8D0]/60 p-5 space-y-4 hover:border-[#1995AD] transition-all shadow-xs"
               >
-                {/* Información del Activo y Solicitud */}
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    {/* Badge de Estado */}
+                {/* 1. HERO BANNER: Visibilidad destacada del equipo que se está trabajando */}
+                <div className="bg-gradient-to-r from-[#172B4D]/5 via-[#1995AD]/10 to-transparent p-3.5 rounded-2xl border border-[#AFC8D0]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-2xl bg-[#1995AD] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Package className="h-6 w-6 stroke-[2.2]" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black tracking-wider uppercase text-[#1995AD] block">
+                        EQUIPO EN GESTIÓN OPERATIVA
+                      </span>
+                      <h3 className="text-base sm:text-lg font-black text-[#172B4D] leading-tight">
+                        {item.assetModel}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center flex-wrap gap-2 self-start sm:self-center">
+                    <span className="font-mono text-xs font-black px-3 py-1 rounded-xl bg-[#172B4D] text-[#A1D6E2] tracking-wider border border-[#1995AD]/40 shadow-xs">
+                      S/N: {item.assetSerial}
+                    </span>
                     <span
-                      className={`px-3 py-0.5 rounded-full text-xs font-extrabold ${
+                      className={`px-3 py-1 rounded-xl text-xs font-black ${
                         isRequested
                           ? "bg-purple-100 text-purple-800 border border-purple-200"
                           : isApproved
@@ -632,72 +735,63 @@ export default function LoansPage() {
                         ? "Rechazado"
                         : "Devuelto a Bodega"}
                     </span>
-
-                    {/* Serial del Equipo */}
-                    <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-md bg-[#F1F1F2] text-[#1995AD] border border-[#AFC8D0]/50">
-                      {item.assetSerial}
-                    </span>
                   </div>
+                </div>
 
-                  {/* Modelo */}
-                  <h3 className="text-lg font-extrabold text-[#172B4D] flex items-center gap-2">
-                    <Package className="h-5 w-5 text-[#1995AD] shrink-0" />
-                    <span>{item.assetModel}</span>
-                  </h3>
-
+                {/* 2. DETALLES Y ACCIONES */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-1">
                   {/* Motivo y Técnico */}
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-[#172B4D]/75 pt-0.5">
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-[#172B4D]/75">
                     <span className="inline-flex items-center gap-1.5 font-semibold">
-                      <User className="h-3.5 w-3.5 text-[#1995AD]" />
+                      <User className="h-4 w-4 text-[#1995AD]" />
                       <strong>Técnico:</strong> {item.technicianName}
                     </span>
 
                     <span className="inline-flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-[#1995AD]" />
-                      <strong>Retorno:</strong> {item.expectedReturnDate}
+                      <Calendar className="h-4 w-4 text-[#1995AD]" />
+                      <strong>Fecha Retorno:</strong> {item.expectedReturnDate}
                     </span>
 
                     {item.motive && (
-                      <span className="inline-flex items-center gap-1.5 text-[#172B4D]/60 italic">
+                      <span className="inline-flex items-center gap-1.5 text-[#172B4D]/70 italic bg-[#F1F1F2] px-2.5 py-1 rounded-lg">
                         <FileText className="h-3.5 w-3.5 text-[#AFC8D0]" />
                         &quot;{item.motive}&quot;
                       </span>
                     )}
                   </div>
-                </div>
 
-                {/* Acciones según Rol y Estado */}
-                <div className="flex items-center flex-wrap gap-2 shrink-0">
-                  {/* Administrador / Inspector: Aprobar o Rechazar solicitud pendiente */}
-                  {isAdminOrInspector && isRequested && (
-                    <>
+                  {/* Acciones según Rol y Estado */}
+                  <div className="flex items-center flex-wrap gap-2 shrink-0">
+                    {/* Administrador / Inspector: Aprobar o Rechazar solicitud pendiente */}
+                    {isAdminOrInspector && isRequested && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleApprove(item)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <Check className="h-4 w-4" /> Aprobar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleReject(item)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <Ban className="h-4 w-4" /> Rechazar
+                        </button>
+                      </>
+                    )}
+
+                    {/* TÉCNICO: Ver PIN OTP (El inspector NUNCA ve el código directamente en pantalla) */}
+                    {isTechnician && isApproved && (
                       <button
                         type="button"
-                        onClick={() => handleApprove(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors cursor-pointer"
+                        onClick={() => handleGenerateOrViewOtp(item)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#1995AD] text-white font-bold text-xs hover:bg-[#172B4D] transition-colors shadow-xs cursor-pointer"
                       >
-                        <Check className="h-4 w-4" /> Aprobar
+                        <KeyRound className="h-4 w-4" /> Ver PIN OTP
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleReject(item)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors cursor-pointer"
-                      >
-                        <Ban className="h-4 w-4" /> Rechazar
-                      </button>
-                    </>
-                  )}
-
-                  {/* Aprobado: Ver o Generar PIN OTP */}
-                  {isApproved && (
-                    <button
-                      type="button"
-                      onClick={() => handleGenerateOrViewOtp(item)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#1995AD] text-white font-bold text-xs hover:bg-[#172B4D] transition-colors shadow-xs cursor-pointer"
-                    >
-                      <KeyRound className="h-4 w-4" /> Ver PIN OTP
-                    </button>
-                  )}
+                    )}
 
                   {/* Inspector / Admin: Validar PIN de entrega física */}
                   {isAdminOrInspector && isApproved && (
@@ -730,16 +824,19 @@ export default function LoansPage() {
                   )}
                 </div>
               </div>
-            );
-          })
+            </div>
+          );
+        })
         )}
       </div>
 
       {/* MODAL 1: Solicitar Préstamo (+ Nueva Solicitud) */}
       {isRequestModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border-2 border-[#1995AD]/40 space-y-5">
-            <div className="flex items-center justify-between border-b border-[#AFC8D0]/40 pb-3">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto"
+        >
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border-2 border-[#1995AD]/40 flex flex-col overflow-visible transform transition-all duration-200 ease-out my-auto">
+            <div className="flex items-center justify-between border-b border-[#AFC8D0]/40 p-5 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="h-10 w-10 rounded-xl bg-[#1995AD]/15 flex items-center justify-center text-[#1995AD]">
                   <Plus className="h-5 w-5" />
@@ -758,78 +855,76 @@ export default function LoansPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateRequest} className="space-y-4">
-              {/* Selector de Activo Disponible */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
-                  Equipo Disponible en Bodega
-                </label>
-                <select
-                  required
-                  value={selectedAssetId}
-                  onChange={(e) => setSelectedAssetId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm font-semibold text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
-                >
-                  <option value="">-- Selecciona un equipo disponible --</option>
-                  {availableAssetsList.map((asset: any) => (
-                    <option key={asset.id} value={asset.id}>
-                      {asset.serialNumber} — {asset.model}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <form onSubmit={handleCreateRequest} className="flex flex-col flex-1 overflow-visible">
+              <div
+                className="p-5 sm:p-6 space-y-4 text-sm overflow-visible flex-1"
+              >
+                {/* Selector de Activo Disponible */}
+                <div className="space-y-1.5 relative z-40">
+                  <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
+                    Equipo Disponible en Bodega
+                  </label>
+                  <CustomSelect
+                    value={selectedAssetId}
+                    onChange={setSelectedAssetId}
+                    options={availableAssetOptions}
+                    size="lg"
+                    placeholder="-- Selecciona un equipo disponible --"
+                  />
+                </div>
 
-              {/* Fechas */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Fechas */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
+                      Fecha Requerida
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={requiredDate}
+                      onChange={(e) => setRequiredDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
+                      Fecha de Devolución
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={expectedReturnDate}
+                      onChange={(e) => setExpectedReturnDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
+                    />
+                  </div>
+                </div>
+
+                {/* Motivo */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
-                    Fecha Requerida
+                    Motivo u Operación Técnica
                   </label>
-                  <input
-                    type="date"
+                  <textarea
+                    rows={3}
                     required
-                    value={requiredDate}
-                    onChange={(e) => setRequiredDate(e.target.value)}
+                    placeholder="Ej: Empalme de fibra óptica en cuadrilla de emergencia..."
+                    value={requestMotive}
+                    onChange={(e) => setRequestMotive(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
-                    Fecha de Devolución
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={expectedReturnDate}
-                    onChange={(e) => setExpectedReturnDate(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
-                  />
-                </div>
+                {requestError && (
+                  <p className="text-xs font-bold text-red-600 flex items-center gap-1.5">
+                    <AlertCircle className="h-4 w-4" /> {requestError}
+                  </p>
+                )}
               </div>
 
-              {/* Motivo */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#172B4D] uppercase tracking-wide">
-                  Motivo u Operación Técnica
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  placeholder="Ej: Empalme de fibra óptica en cuadrilla de emergencia..."
-                  value={requestMotive}
-                  onChange={(e) => setRequestMotive(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
-                />
-              </div>
-
-              {requestError && (
-                <p className="text-xs font-bold text-red-600 flex items-center gap-1.5">
-                  <AlertCircle className="h-4 w-4" /> {requestError}
-                </p>
-              )}
-
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex items-center gap-3 p-4 bg-[#F8FAFC] border-t border-[#F1F1F2] shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsRequestModalOpen(false)}
@@ -852,8 +947,8 @@ export default function LoansPage() {
 
       {/* MODAL 2: Ver PIN OTP (6 dígitos) */}
       {selectedOtpLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border-2 border-[#1995AD]/40 text-center space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border-2 border-[#1995AD]/40 text-center space-y-4 transform transition-all duration-200 ease-out">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-5 w-5 text-[#1995AD]" />
@@ -899,10 +994,10 @@ export default function LoansPage() {
 
       {/* MODAL 3: Validar PIN (Entrega) */}
       {selectedValidationLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/50 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden">
           <form
             onSubmit={handleValidatePin}
-            className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border-2 border-amber-400 space-y-4"
+            className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border-2 border-amber-400 space-y-4 transform transition-all duration-200 ease-out"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -964,10 +1059,10 @@ export default function LoansPage() {
 
       {/* MODAL 4: Recibir Devolución de Equipo */}
       {selectedReturnLoan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/50 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden">
           <form
             onSubmit={handleConfirmReturn}
-            className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border-2 border-[#172B4D] space-y-4"
+            className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border-2 border-[#172B4D] space-y-4 transform transition-all duration-200 ease-out"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -12,253 +13,201 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Send,
   Copy,
   Check,
+  KeyRound,
+  X,
 } from "lucide-react";
 
-const ADMIN_EMAIL = "admin@globalnet.com";
-const ALLOWED_PASSWORD_REGEX = /^[a-zA-Z0-9$!#%&]*$/;
-const REMEMBER_STORAGE_KEY = "assetguard_remembered_credentials";
+const ADMIN_EMAIL = "valesotelo.0806@gmail.com";
+const ALLOWED_PWD_REGEX = /^[a-zA-Z0-9@#$*_!%&\-]*$/;
+const TAB_EMAIL_KEY = "assetguard_tab_email";
+const TAB_REMEMBER_KEY = "assetguard_tab_remember";
+const GLOBAL_REMEMBER_KEY = "assetguard_remembered_email";
+
+// Validaciones puras desacopladas del ciclo de vida del componente
+const validateEmail = (val: string): string[] => {
+  const t = val.trim();
+  if (!t) return ["Falta ingresar el correo electrónico."];
+  if (!t.includes("@")) return ["Falta el símbolo '@' (ej: usuario@globalnet.com)."];
+  const [local, ...domains] = t.split("@");
+  const domain = domains.join("@");
+  const errors: string[] = [];
+  if (!local) errors.push("Falta el usuario antes de '@'.");
+  if (!domain || !domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) {
+    errors.push("Falta completar el dominio después de '@' (ej: @globalnet.com).");
+  }
+  return errors;
+};
+
+const validatePasswordRecovery = (pwd: string, confirm: string): string | null => {
+  if (pwd.length < 6 || pwd.length > 20) return "La contraseña debe tener entre 6 y 20 caracteres.";
+  if (!ALLOWED_PWD_REGEX.test(pwd)) return "Solo se permiten letras, números y símbolos (@, #, $, *, _, -).";
+  if (!/[A-Z]/.test(pwd) || !/[a-z]/.test(pwd) || !/[0-9]/.test(pwd) || !/[@#$*_!%&\-]/.test(pwd)) {
+    return "La contraseña debe combinar mayúsculas (A-Z), minúsculas (a-z), números (0-9) y símbolos (@, #, $, *, _, -).";
+  }
+  return pwd !== confirm ? "Las contraseñas no coinciden." : null;
+};
 
 export default function LoginPage() {
   const router = useRouter();
   const { login, authError } = useAuth();
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // Estados estructurados por dominio funcional
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    showPwd: false,
+    remember: false,
+    isSubmitting: false,
+  });
+  const [touched, setTouched] = useState({ email: false, password: false });
+  const [feedback, setFeedback] = useState<{ err: string | null; success: string | null }>({
+    err: null,
+    success: null,
+  });
 
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const [showAdminContact, setShowAdminContact] = useState(false);
+  const [copiedAdmin, setCopiedAdmin] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Cargar correo y contraseña recordados al abrir la página
+  // Estado del Modal de Recuperación Directa
+  const [recovery, setRecovery] = useState({
+    isOpen: false,
+    email: "",
+    pwd: "",
+    confirm: "",
+    showPwd: false,
+    showConfirm: false,
+    isSubmitting: false,
+    err: null as string | null,
+    success: null as string | null,
+  });
+
   useEffect(() => {
+    setIsMounted(true);
     try {
-      const saved = localStorage.getItem(REMEMBER_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.email) setLoginEmail(parsed.email);
-        if (parsed?.password) setLoginPassword(parsed.password);
-        setRememberMe(true);
+      const tabEmail = sessionStorage.getItem(TAB_EMAIL_KEY)?.trim();
+      const tabRem = sessionStorage.getItem(TAB_REMEMBER_KEY);
+      if (tabEmail) {
+        const isRem =
+          tabRem === "true" ||
+          localStorage.getItem(`assetguard_remember_${tabEmail.toLowerCase()}`) === "true";
+        setForm((f) => ({ ...f, email: tabEmail, remember: isRem }));
+        return;
       }
-    } catch {
-      // ignore
-    }
+      const savedEmail = localStorage.getItem(GLOBAL_REMEMBER_KEY)?.trim();
+      if (
+        savedEmail &&
+        localStorage.getItem(`assetguard_remember_${savedEmail.toLowerCase()}`) !== "false"
+      ) {
+        setForm((f) => ({ ...f, email: savedEmail, remember: true }));
+        sessionStorage.setItem(TAB_EMAIL_KEY, savedEmail);
+        sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
+      }
+    } catch {}
   }, []);
 
-  // Validation states on finish typing (onBlur) & invalid character feedback
-  const [emailTouched, setEmailTouched] = useState(false);
-  const [passwordTouched, setPasswordTouched] = useState(false);
-  const [invalidCharNotice, setInvalidCharNotice] = useState<string | null>(null);
+  const emailErrors = touched.email ? validateEmail(form.email) : [];
+  const passwordErrors = touched.password && !form.password ? ["Ingresa tu contraseña."] : [];
 
-  // Password recovery & Admin contact states
-  const [showRecoveryBox, setShowRecoveryBox] = useState(false);
-  const [recoveryEmail, setRecoveryEmail] = useState("");
-  const [recoveryNote, setRecoveryNote] = useState("");
-  const [recoverySentMsg, setRecoverySentMsg] = useState<string | null>(null);
-  const [showAdminContact, setShowAdminContact] = useState(false);
-  const [copiedAdminEmail, setCopiedAdminEmail] = useState(false);
-
-  const getEmailValidationErrors = (value: string): string[] => {
-    const trimmed = value.trim();
-    const missing: string[] = [];
-
-    if (!trimmed) {
-      missing.push("Falta ingresar el correo electrónico.");
-      return missing;
-    }
-    if (!trimmed.includes("@")) {
-      missing.push("Falta el símbolo '@' (ej: usuario@globalnet.com).");
-      return missing;
-    }
-
-    const [localPart, ...domainParts] = trimmed.split("@");
-    const domainPart = domainParts.join("@");
-
-    if (!localPart) {
-      missing.push("Falta el usuario antes de '@'.");
-    }
-    if (!domainPart || !domainPart.includes(".") || domainPart.startsWith(".") || domainPart.endsWith(".")) {
-      missing.push("Falta completar el dominio después de '@' (ej: @globalnet.com).");
-    }
-
-    return missing;
-  };
-
-  const getPasswordValidationErrors = (value: string): string[] => {
-    const missing: string[] = [];
-
-    if (!value) {
-      missing.push("Falta ingresar la contraseña.");
-      return missing;
-    }
-    if (value.length < 6) {
-      missing.push(`Faltan ${6 - value.length} caracteres (mínimo 6, máximo 20).`);
-    }
-    if (!ALLOWED_PASSWORD_REGEX.test(value)) {
-      missing.push("Solo se permiten letras, números y signos ($!#%&).");
-    }
-
-    return missing;
-  };
-
-  const emailErrors = emailTouched ? getEmailValidationErrors(loginEmail) : [];
-  const passwordErrors = passwordTouched ? getPasswordValidationErrors(loginPassword) : [];
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLoginEmail(e.target.value);
-    setErrorMsg(null);
-  };
-
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value;
-    setErrorMsg(null);
-
-    if (!ALLOWED_PASSWORD_REGEX.test(rawValue)) {
-      const invalidChars = Array.from(rawValue).filter((ch) => !ALLOWED_PASSWORD_REGEX.test(ch));
-      const uniqueInvalid = Array.from(new Set(invalidChars)).join(" ");
-      setInvalidCharNotice(
-        `Carácter no permitido (${uniqueInvalid}). Solo letras, números y $ ! # % &`
-      );
-      const sanitized = rawValue
-        .split("")
-        .filter((ch) => ALLOWED_PASSWORD_REGEX.test(ch))
-        .join("")
-        .slice(0, 20);
-      setLoginPassword(sanitized);
-      return;
-    }
-
-    setInvalidCharNotice(null);
-    setLoginPassword(rawValue.slice(0, 20));
+  const handleEmailChange = (val: string) => {
+    setForm((f) => ({ ...f, email: val }));
+    setFeedback({ err: null, success: null });
+    try {
+      sessionStorage.setItem(TAB_EMAIL_KEY, val);
+      const clean = val.trim().toLowerCase();
+      if (clean && localStorage.getItem(`assetguard_remember_${clean}`) === "true") {
+        setForm((f) => ({ ...f, remember: true }));
+        sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
+      }
+    } catch {}
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    setEmailTouched(true);
-    setPasswordTouched(true);
-
-    const currentEmailErrors = getEmailValidationErrors(loginEmail);
-    const currentPasswordErrors = getPasswordValidationErrors(loginPassword);
-
-    if (currentEmailErrors.length > 0 || currentPasswordErrors.length > 0) {
-      setErrorMsg("Completa los requisitos indicados en los campos.");
+    setTouched({ email: true, password: true });
+    if (validateEmail(form.email).length > 0 || !form.password) {
+      setFeedback({ err: "Completa los requisitos indicados en los campos.", success: null });
       return;
     }
 
-    setIsSubmitting(true);
+    setForm((f) => ({ ...f, isSubmitting: true }));
     try {
-      const res = await login(loginEmail.trim(), loginPassword);
+      const cleanEmail = form.email.trim();
+      const res = await login(cleanEmail, form.password);
       if (res.success) {
-        try {
-          if (rememberMe) {
-            localStorage.setItem(
-              REMEMBER_STORAGE_KEY,
-              JSON.stringify({ email: loginEmail.trim(), password: loginPassword })
-            );
-          } else {
-            localStorage.removeItem(REMEMBER_STORAGE_KEY);
+        sessionStorage.setItem(TAB_EMAIL_KEY, cleanEmail);
+        sessionStorage.setItem(TAB_REMEMBER_KEY, String(form.remember));
+        const lower = cleanEmail.toLowerCase();
+        if (form.remember) {
+          localStorage.setItem(`assetguard_remember_${lower}`, "true");
+          localStorage.setItem(GLOBAL_REMEMBER_KEY, cleanEmail);
+        } else {
+          localStorage.removeItem(`assetguard_remember_${lower}`);
+          if (localStorage.getItem(GLOBAL_REMEMBER_KEY)?.toLowerCase() === lower) {
+            localStorage.removeItem(GLOBAL_REMEMBER_KEY);
           }
-        } catch {
-          // ignore
         }
-        setSuccessMsg("¡Acceso concedido! Ingresando...");
+        setFeedback({ err: null, success: "¡Acceso concedido! Ingresando..." });
         window.dispatchEvent(new CustomEvent("assetguard:wave-start"));
-        // Cambia la interfaz apenas la ola cubre la pantalla (1.15s) para que ya esté lista sin ninguna pausa
         setTimeout(() => router.replace("/"), 1150);
       } else {
-        setErrorMsg(res.error || "Correo o contraseña incorrectos.");
+        setFeedback({ err: res.error || "Correo o contraseña incorrectos.", success: null });
       }
     } finally {
-      setIsSubmitting(false);
+      setForm((f) => ({ ...f, isSubmitting: false }));
     }
   };
 
-  const handleSendRecoveryEmail = async () => {
-    const targetUserEmail = (recoveryEmail || loginEmail).trim().toLowerCase();
-
-    if (targetUserEmail === ADMIN_EMAIL) {
-      setRecoverySentMsg(null);
-      setErrorMsg("La cuenta de Administrador (Angie Ramos) no utiliza este canal de recuperación.");
+  const handleRecoverySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = recovery.email.trim().toLowerCase();
+    if (!cleanEmail.includes("@")) {
+      setRecovery((r) => ({ ...r, err: "Ingresa un correo corporativo válido." }));
+      return;
+    }
+    const pwdErr = validatePasswordRecovery(recovery.pwd, recovery.confirm);
+    if (pwdErr) {
+      setRecovery((r) => ({ ...r, err: pwdErr }));
       return;
     }
 
-    const emailValidation = getEmailValidationErrors(targetUserEmail);
-
-    if (emailValidation.length > 0) {
-      setRecoverySentMsg(null);
-      setErrorMsg(emailValidation[0]);
-      return;
-    }
-
-    setErrorMsg(null);
-    const noteText = recoveryNote.trim() || "Solicito restablecimiento de mi contraseña de acceso.";
-
+    setRecovery((r) => ({ ...r, isSubmitting: true, err: null }));
     try {
-      const raw = localStorage.getItem("assetguard_recovery_requests");
-      const currentList: Array<{ email: string; note?: string; requestedAt: string; status: string }> = raw
-        ? JSON.parse(raw)
-        : [];
-      const updated = [
-        {
-          email: targetUserEmail,
-          note: noteText,
-          requestedAt: new Date().toISOString(),
-          status: "PENDING",
-        },
-        ...currentList.filter((item) => item.email !== targetUserEmail),
-      ];
-      localStorage.setItem("assetguard_recovery_requests", JSON.stringify(updated));
-
-      await fetch("/api/auth/password-recovery", {
+      const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: targetUserEmail, note: noteText }),
+        body: JSON.stringify({ email: cleanEmail, token: "TOKEN_VERIFIED", newPassword: recovery.pwd }),
       });
-    } catch {
-      // Queda registrado en cola local
+      if (!res.ok) throw new Error((await res.json()).message || "No se pudo actualizar la contraseña.");
+      setRecovery((r) => ({ ...r, success: "¡Contraseña actualizada exitosamente!" }));
+      setForm((f) => ({ ...f, email: cleanEmail, password: recovery.pwd }));
+      setFeedback({ err: null, success: null });
+      setTimeout(() => {
+        setRecovery((r) => ({ ...r, isOpen: false }));
+        setFeedback({ err: null, success: "Contraseña actualizada. Puedes ingresar al sistema ahora." });
+      }, 1200);
+    } catch (err: any) {
+      setRecovery((r) => ({ ...r, err: err.message || "Error al actualizar la contraseña." }));
+    } finally {
+      setRecovery((r) => ({ ...r, isSubmitting: false }));
     }
-
-    const subject = encodeURIComponent(`Recuperación de Contraseña - ${targetUserEmail}`);
-    const body = encodeURIComponent(
-      `Usuario solicitante: ${targetUserEmail}\nMotivo: ${noteText}\nDestinatario: Administrador del Sistema (Angie Ramos)`
-    );
-    try {
-      window.location.href = `mailto:${ADMIN_EMAIL}?subject=${subject}&body=${body}`;
-    } catch {
-      // ignore
-    }
-
-    setRecoverySentMsg(
-      `¡Solicitud enviada exitosamente! Se ha enviado el correo a Angie Ramos (Administrador) para restablecer la contraseña de ${targetUserEmail}.`
-    );
   };
 
   const handleCopyAdminEmail = async () => {
     try {
       await navigator.clipboard.writeText(ADMIN_EMAIL);
-      setCopiedAdminEmail(true);
-      setTimeout(() => setCopiedAdminEmail(false), 2000);
-    } catch {
-      // ignore
-    }
+      setCopiedAdmin(true);
+      setTimeout(() => setCopiedAdmin(false), 2000);
+    } catch {}
   };
 
   return (
     <div className="min-h-screen bg-[#E3EAEE] flex flex-col relative overflow-hidden">
-      {/* Main Content: Two columns side by side */}
       <div className="flex-1 flex flex-col md:flex-row">
-        {/* LEFT COLUMN — Brand / Identity Panel */}
-        <div
-          className={`md:w-1/2 bg-gradient-to-br from-[#1995AD] via-[#68B2C4] to-[#A1D6E2] flex flex-col items-center justify-center px-8 sm:px-12 py-10 transition-all duration-200 ${
-            showRecoveryBox ? "blur-[4px] opacity-70 pointer-events-none select-none" : ""
-          }`}
-        >
+        {/* PANEL IZQUIERDO — Identidad Institucional */}
+        <div className="md:w-1/2 bg-gradient-to-br from-[#1995AD] via-[#68B2C4] to-[#A1D6E2] flex flex-col items-center justify-center px-8 sm:px-12 py-10 transition-all duration-200">
           <div className="w-full flex flex-col items-center justify-center gap-5">
             <Image
               src="/logo.png"
@@ -269,18 +218,13 @@ export default function LoginPage() {
               priority
               unoptimized
             />
-
             <div className="text-center space-y-2">
               <h1 className="font-title text-[clamp(2.2rem,5vw,4.5rem)] text-white tracking-tight leading-none drop-shadow-xs whitespace-nowrap">
-                <span className="inline-block whitespace-nowrap">
-                  AssetGuard<span className="text-[#172B4D]">_2620</span>
-                </span>
+                AssetGuard<span className="text-[#172B4D]">_2620</span>
               </h1>
-
               <p className="font-title text-[clamp(1.1rem,2vw,1.5rem)] text-[#172B4D] tracking-wide whitespace-nowrap">
                 GlobalNet Telecom
               </p>
-
               <p className="text-white font-semibold text-lg sm:text-xl lg:text-2xl leading-snug pt-2 max-w-md mx-auto">
                 Sistema centralizado de control de inventario y custodia
               </p>
@@ -288,15 +232,10 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN — Wide Login Card (ancho amplio, altura compacta a la mitad) */}
+        {/* PANEL DERECHO — Tarjeta de Inicio de Sesión */}
         <div className="md:w-1/2 flex items-center justify-center p-4 sm:p-8 bg-[#DDE6EC]">
           <div className="w-full max-w-2xl bg-white px-8 sm:px-12 py-7 sm:py-9 rounded-3xl border-2 border-[#1995AD]/45 shadow-2xl shadow-[#172B4D]/15 space-y-5">
-            {/* Title — Más gordito y centrado */}
-            <div
-              className={`text-center transition-all duration-200 ${
-                showRecoveryBox ? "blur-[4px] opacity-60 pointer-events-none select-none" : ""
-              }`}
-            >
+            <div className="text-center">
               <h2
                 style={{
                   fontFamily: '"Arial Black", "Segoe UI Black", "Montserrat", sans-serif',
@@ -308,35 +247,53 @@ export default function LoginPage() {
               </h2>
             </div>
 
-            {/* Global Feedback Banners */}
+            {/* Banners Informativos */}
             {authError && (
               <div className="rounded-xl bg-amber-50 border border-amber-200 p-3.5 text-sm text-amber-800 flex items-center gap-2 font-medium">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
                 <span>{authError}</span>
               </div>
             )}
-            {errorMsg && (
-              <div className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-sm text-red-700 flex items-center gap-2 font-medium">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
-                <span>{errorMsg}</span>
+            {feedback.err && (
+              <div className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-sm text-red-700 flex flex-col gap-1.5 font-medium">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                    <span>{feedback.err}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFeedback({ ...feedback, err: null })}
+                    className="text-red-500 hover:text-red-800 text-xs font-bold cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+                {feedback.err.toLowerCase().includes("intentos") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecovery((r) => ({ ...r, isOpen: true, email: form.email, err: null }));
+                      setFeedback({ ...feedback, err: null });
+                    }}
+                    className="text-xs text-[#1995AD] font-bold hover:underline self-start mt-0.5 cursor-pointer"
+                  >
+                    ¿Deseas restablecer tu contraseña ahora? Haz clic aquí
+                  </button>
+                )}
               </div>
             )}
-            {successMsg && (
+            {feedback.success && (
               <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5 text-sm text-emerald-800 flex items-center gap-2 font-medium">
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-                <span>{successMsg}</span>
+                <span>{feedback.success}</span>
               </div>
             )}
 
-            {/* Login Form */}
+            {/* Formulario de Login */}
             <form onSubmit={handleLoginSubmit} noValidate className="space-y-5">
-              {/* Campos superiores (se desenfocan cuando se abre el recuadro de recuperación) */}
-              <div
-                className={`space-y-5 transition-all duration-200 ${
-                  showRecoveryBox ? "blur-[4px] opacity-60 pointer-events-none select-none" : ""
-                }`}
-              >
-                {/* EMAIL BOX */}
+              <div className="space-y-5">
+                {/* CAMPO CORREO */}
                 <div
                   className={`rounded-2xl border-2 p-4 sm:p-5 transition-all ${
                     emailErrors.length > 0
@@ -344,13 +301,9 @@ export default function LoginPage() {
                       : "border-[#AFC8D0] bg-[#F1F1F2]/80 focus-within:border-[#1995AD] focus-within:bg-white"
                   }`}
                 >
-                  <label
-                    htmlFor="login-email"
-                    className="block text-sm font-bold text-[#172B4D] uppercase tracking-wider mb-2"
-                  >
+                  <label htmlFor="login-email" className="block text-sm font-bold text-[#172B4D] uppercase tracking-wider mb-2">
                     Correo Electrónico
                   </label>
-
                   <div className="relative">
                     <Mail className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -360,294 +313,299 @@ export default function LoginPage() {
                       autoComplete="username"
                       required
                       placeholder="usuario@globalnet.com"
-                      value={loginEmail}
-                      onChange={handleEmailChange}
-                      onBlur={() => setEmailTouched(true)}
+                      value={form.email}
+                      onChange={(e) => handleEmailChange(e.target.value)}
+                      onBlur={() => setTouched((t) => ({ ...t, email: true }))}
                       className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
                   </div>
-
                   {emailErrors.length > 0 && (
-                    <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">
-                      {emailErrors.join(" ")}
-                    </p>
+                    <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">{emailErrors.join(" ")}</p>
                   )}
                 </div>
 
-                {/* PASSWORD BOX */}
+                {/* CAMPO CONTRASEÑA */}
                 <div
                   className={`rounded-2xl border-2 p-4 sm:p-5 transition-all ${
-                    passwordErrors.length > 0 || invalidCharNotice
+                    passwordErrors.length > 0
                       ? "border-red-400 bg-red-50/40"
                       : "border-[#AFC8D0] bg-[#F1F1F2]/80 focus-within:border-[#1995AD] focus-within:bg-white"
                   }`}
                 >
-                  <label
-                    htmlFor="login-password"
-                    className="block text-sm font-bold text-[#172B4D] uppercase tracking-wider mb-2"
-                  >
+                  <label htmlFor="login-password" className="block text-sm font-bold text-[#172B4D] uppercase tracking-wider mb-2">
                     Contraseña
                   </label>
-
                   <div className="relative">
                     <Lock className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-password"
                       name="password"
-                      type={showPassword ? "text" : "password"}
+                      type={form.showPwd ? "text" : "password"}
                       autoComplete="current-password"
                       required
-                      maxLength={20}
-                      placeholder="Letras, números y signos ($!#%&)"
-                      value={loginPassword}
-                      onChange={handlePasswordChange}
-                      onBlur={() => setPasswordTouched(true)}
+                      placeholder="Ingresa tu contraseña"
+                      value={form.password}
+                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      onBlur={() => setTouched((t) => ({ ...t, password: true }))}
                       className="w-full pl-11 pr-11 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD]"
+                      onClick={() => setForm((f) => ({ ...f, showPwd: !f.showPwd }))}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
                     >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {form.showPwd ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
-
-                  {invalidCharNotice && (
-                    <p className="mt-2 text-xs sm:text-sm font-semibold text-amber-700">
-                      {invalidCharNotice}
-                    </p>
-                  )}
-
                   {passwordErrors.length > 0 && (
-                    <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">
-                      {passwordErrors.join(" ")}
-                    </p>
+                    <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">{passwordErrors.join(" ")}</p>
                   )}
                 </div>
               </div>
 
-              {/* Área debajo de Contraseña: Si está activo "¿Olvidaste tu contraseña?", abarca toda esta zona */}
-              {!showRecoveryBox ? (
-                <>
-                  {/* Options row */}
-                  <div className="flex items-center justify-between gap-2 text-sm sm:text-base">
-                    <label className="inline-flex items-center gap-2 cursor-pointer text-[#172B4D] font-medium select-none">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setRememberMe(checked);
-                          try {
-                            if (!checked) {
-                              localStorage.removeItem(REMEMBER_STORAGE_KEY);
-                            } else if (loginEmail.trim() || loginPassword) {
-                              localStorage.setItem(
-                                REMEMBER_STORAGE_KEY,
-                                JSON.stringify({ email: loginEmail.trim(), password: loginPassword })
-                              );
+              {/* OPCIONES DE SESIÓN Y RECUPERACIÓN */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 text-sm sm:text-base">
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-[#172B4D] font-medium select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.remember}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setForm((f) => ({ ...f, remember: checked }));
+                        try {
+                          sessionStorage.setItem(TAB_REMEMBER_KEY, checked ? "true" : "false");
+                          const curEmail = form.email.trim();
+                          const lower = curEmail.toLowerCase();
+                          if (curEmail) {
+                            if (checked) {
+                              sessionStorage.setItem(TAB_EMAIL_KEY, curEmail);
+                              localStorage.setItem(`assetguard_remember_${lower}`, "true");
+                              localStorage.setItem(GLOBAL_REMEMBER_KEY, curEmail);
+                            } else {
+                              localStorage.removeItem(`assetguard_remember_${lower}`);
+                              if (localStorage.getItem(GLOBAL_REMEMBER_KEY)?.toLowerCase() === lower) {
+                                localStorage.removeItem(GLOBAL_REMEMBER_KEY);
+                              }
                             }
-                          } catch {
-                            // ignore
                           }
-                        }}
-                        className="h-4 w-4 rounded border-[#BCBABE] text-[#1995AD] focus:ring-[#1995AD]"
-                      />
-                      <span>Recordar sesión</span>
-                    </label>
+                        } catch {}
+                      }}
+                      className="h-4 w-4 rounded border-[#BCBABE] text-[#1995AD] focus:ring-[#1995AD]"
+                    />
+                    <span>Recordar sesión</span>
+                  </label>
 
-                    {/* Acción "¿Olvidaste tu contraseña?": Solo disponible para Inspector y Técnico (oculta para el Admin) */}
-                    {loginEmail.trim().toLowerCase() !== ADMIN_EMAIL ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowRecoveryBox(true);
-                          setRecoverySentMsg(null);
-                          setRecoveryEmail(loginEmail.trim());
-                        }}
-                        className="font-bold text-[#1995AD] hover:text-[#172B4D] underline underline-offset-4 cursor-pointer"
-                      >
-                        ¿Olvidaste tu contraseña?
-                      </button>
-                    ) : (
-                      <span className="text-xs text-[#172B4D]/60 italic font-medium">
-                        Cuenta Administrador principal
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Submit Button — Solo dice "Ingresar" y más grande */}
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    style={{
-                      fontFamily: '"Arial Black", "Segoe UI Black", sans-serif',
-                    }}
-                    className="w-full py-5 rounded-2xl bg-gradient-to-r from-[#1995AD] via-[#AFC8D0] to-[#A1D6E2] text-[#172B4D] font-black text-2xl sm:text-3xl tracking-wide hover:opacity-95 disabled:opacity-60 disabled:cursor-wait shadow-md flex items-center justify-center gap-3 transition-all"
-                  >
-                    <span>{isSubmitting ? "Validando..." : "Ingresar"}</span>
-                    <ArrowRight className="h-7 w-7 stroke-[3]" />
-                  </button>
-                </>
-              ) : (
-                <div className="relative z-20 rounded-2xl border-2 border-[#1995AD] bg-[#F1F1F2] p-5 space-y-4 shadow-xl">
-                  {recoverySentMsg ? (
-                    <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-300 p-5 space-y-3 text-center">
-                      <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
-                        <CheckCircle2 className="h-7 w-7" />
-                      </div>
-                      <h4 className="font-title text-xl text-emerald-900">
-                        ¡Correo Enviado Exitosamente!
-                      </h4>
-                      <p className="text-xs sm:text-sm font-semibold text-emerald-800 leading-relaxed max-w-md mx-auto">
-                        {recoverySentMsg}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowRecoveryBox(false);
-                          setRecoverySentMsg(null);
-                        }}
-                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors shadow-xs cursor-pointer"
-                      >
-                        Volver a Iniciar Sesión
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-sm sm:text-base font-bold text-[#172B4D] block">
-                            Recuperar Contraseña (Inspector / Técnico)
-                          </span>
-                          <span className="text-xs text-[#172B4D]/70">
-                            Se enviará la solicitud al Administrador (Angie Ramos)
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowRecoveryBox(false);
-                            setRecoverySentMsg(null);
-                          }}
-                          className="text-xs sm:text-sm font-bold text-[#1995AD] hover:text-[#172B4D] underline cursor-pointer"
-                        >
-                          Volver
-                        </button>
-                      </div>
-
-                      {/* Selector rápido de cuenta para Inspector o Técnico */}
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setRecoveryEmail("inspector@globalnet.com")}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                            recoveryEmail === "inspector@globalnet.com"
-                              ? "bg-[#1995AD] text-white"
-                              : "bg-white text-[#172B4D] border border-[#AFC8D0] hover:bg-[#A1D6E2]/30"
-                          }`}
-                        >
-                          Inspector (Ian Sanchez)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRecoveryEmail("technician@globalnet.com")}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                            recoveryEmail === "technician@globalnet.com"
-                              ? "bg-[#1995AD] text-white"
-                              : "bg-white text-[#172B4D] border border-[#AFC8D0] hover:bg-[#A1D6E2]/30"
-                          }`}
-                        >
-                          Técnico (Brayan Cuta)
-                        </button>
-                      </div>
-
-                      <input
-                        type="email"
-                        placeholder="Confirma tu correo (ej: usuario@globalnet.com)"
-                        value={recoveryEmail}
-                        onChange={(e) => setRecoveryEmail(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#BCBABE] bg-white text-sm sm:text-base text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
-                      />
-
-                      <input
-                        type="text"
-                        placeholder="Mensaje para el Administrador (opcional)"
-                        value={recoveryNote}
-                        onChange={(e) => setRecoveryNote(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#BCBABE] bg-white text-sm sm:text-base text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
-                      />
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={handleSendRecoveryEmail}
-                          className="flex-1 py-3 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-base inline-flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer"
-                        >
-                          <Send className="h-4 w-4" />
-                          <span>Enviar correo al Admin</span>
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </form>
-
-            {/* Minimal Admin Contact Footer (solo visible cuando no está abierto el panel de recuperación) */}
-            {!showRecoveryBox && (
-              <div className="pt-3 border-t border-[#F1F1F2] text-center space-y-2.5">
-                <p className="text-sm sm:text-base text-[#172B4D]/80">
-                  ¿Necesitas una cuenta? Contacta al{" "}
                   <button
                     type="button"
-                    onClick={() => setShowAdminContact(!showAdminContact)}
-                    className="font-bold text-[#1995AD] bg-[#A1D6E2]/35 hover:bg-[#A1D6E2]/60 px-2.5 py-0.5 rounded-md underline decoration-[#1995AD] underline-offset-4 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setRecovery({
+                        isOpen: true,
+                        email: form.email.trim(),
+                        pwd: "",
+                        confirm: "",
+                        showPwd: false,
+                        showConfirm: false,
+                        isSubmitting: false,
+                        err: null,
+                        success: null,
+                      });
+                    }}
+                    className="font-bold text-[#1995AD] hover:text-[#172B4D] underline underline-offset-4 cursor-pointer text-xs sm:text-sm inline-block py-1"
                   >
-                    Administrador del Sistema
+                    ¿Olvidaste tu contraseña?
                   </button>
-                </p>
+                </div>
 
-                {showAdminContact && (
-                  <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-[#F1F1F2] border border-[#1995AD]/50 text-sm">
-                    <a
-                      href={`mailto:${ADMIN_EMAIL}`}
-                      className="font-bold text-[#172B4D] hover:text-[#1995AD]"
-                    >
-                      {ADMIN_EMAIL}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={handleCopyAdminEmail}
-                      className="text-xs font-bold text-[#1995AD] hover:text-[#172B4D] inline-flex items-center gap-1"
-                    >
-                      {copiedAdminEmail ? (
-                        <>
-                          <Check className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>Copiado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          <span>Copiar</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
+                {/* BOTÓN INGRESAR */}
+                <button
+                  type="submit"
+                  disabled={form.isSubmitting}
+                  style={{ fontFamily: '"Arial Black", "Segoe UI Black", sans-serif' }}
+                  className="w-full py-5 rounded-2xl bg-gradient-to-r from-[#1995AD] via-[#AFC8D0] to-[#A1D6E2] text-[#172B4D] font-black text-2xl sm:text-3xl tracking-wide hover:opacity-95 disabled:opacity-60 disabled:cursor-wait shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer"
+                >
+                  <span>{form.isSubmitting ? "Validando..." : "Ingresar"}</span>
+                  <ArrowRight className="h-7 w-7 stroke-[3]" />
+                </button>
               </div>
-            )}
+            </form>
+
+            {/* CONTACTO DE ADMINISTRADOR */}
+            <div className="pt-3 border-t border-[#F1F1F2] text-center space-y-2.5">
+              <p className="text-sm sm:text-base text-[#172B4D]/80">
+                ¿Necesitas una cuenta? Contacta al{" "}
+                <button
+                  type="button"
+                  onClick={() => setShowAdminContact(!showAdminContact)}
+                  className="font-bold text-[#1995AD] bg-[#A1D6E2]/35 hover:bg-[#A1D6E2]/60 px-2.5 py-0.5 rounded-md underline decoration-[#1995AD] underline-offset-4 transition-colors cursor-pointer"
+                >
+                  Administrador del Sistema
+                </button>
+              </p>
+
+              {showAdminContact && (
+                <div className="inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-[#F1F1F2] border border-[#1995AD]/50 text-sm">
+                  <a href={`mailto:${ADMIN_EMAIL}`} className="font-bold text-[#172B4D] hover:text-[#1995AD]">
+                    {ADMIN_EMAIL}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopyAdminEmail}
+                    className="text-xs font-bold text-[#1995AD] hover:text-[#172B4D] inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedAdmin ? (
+                      <>
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Copiado</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>Copiar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
+      {/* MODAL DE RESTABLECIMIENTO DIRECTO */}
+      {isMounted && recovery.isOpen && createPortal(
+        <div
+          onClick={() => setRecovery((r) => ({ ...r, isOpen: false }))}
+          className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-900/65 backdrop-blur-xs p-3 sm:p-4 flex items-center justify-center"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full shadow-2xl border-2 border-[#1995AD]/50 flex flex-col overflow-hidden my-auto relative z-10"
+          >
+            <div className="bg-gradient-to-r from-[#172B4D] via-[#1B4965] to-[#1995AD] px-6 py-4 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-white/15 flex items-center justify-center text-white">
+                  <KeyRound className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-title text-lg tracking-wide text-white">Recuperar Contraseña</h3>
+                  <p className="text-xs text-[#A1D6E2]">Define tu nueva clave de acceso</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecovery((r) => ({ ...r, isOpen: false }))}
+                className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecoverySubmit} className="p-5 sm:p-6 space-y-4">
+              {recovery.err && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <span>{recovery.err}</span>
+                </div>
+              )}
+              {recovery.success && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-800 flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{recovery.success}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Correo Electrónico</label>
+                <div className="relative">
+                  <Mail className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="ej: usuario@globalnet.com"
+                    value={recovery.email}
+                    onChange={(e) => setRecovery((r) => ({ ...r, email: e.target.value, err: null }))}
+                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Nueva Contraseña</label>
+                <div className="relative">
+                  <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={recovery.showPwd ? "text" : "password"}
+                    required
+                    maxLength={20}
+                    placeholder="Ingresa tu nueva contraseña"
+                    value={recovery.pwd}
+                    onChange={(e) => {
+                      const clean = e.target.value.split("").filter((ch) => ALLOWED_PWD_REGEX.test(ch)).join("").slice(0, 20);
+                      setRecovery((r) => ({ ...r, pwd: clean, err: null }));
+                    }}
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRecovery((r) => ({ ...r, showPwd: !r.showPwd }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
+                  >
+                    {recovery.showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Confirmar Contraseña</label>
+                <div className="relative">
+                  <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={recovery.showConfirm ? "text" : "password"}
+                    required
+                    maxLength={20}
+                    placeholder="Repite la nueva contraseña"
+                    value={recovery.confirm}
+                    onChange={(e) => {
+                      const clean = e.target.value.split("").filter((ch) => ALLOWED_PWD_REGEX.test(ch)).join("").slice(0, 20);
+                      setRecovery((r) => ({ ...r, confirm: clean, err: null }));
+                    }}
+                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRecovery((r) => ({ ...r, showConfirm: !r.showConfirm }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
+                  >
+                    {recovery.showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F1F1F2]">
+                <button
+                  type="button"
+                  onClick={() => setRecovery((r) => ({ ...r, isOpen: false }))}
+                  className="px-4 py-2.5 rounded-xl bg-[#F1F1F2] hover:bg-[#BCBABE]/40 text-[#172B4D] font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={recovery.isSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {recovery.isSubmitting ? "Guardando..." : "Guardar Contraseña"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Footer */}
-      <footer
-        className={`bg-[#1995AD] text-white py-3 px-6 text-center text-xs transition-all duration-200 ${
-          showRecoveryBox ? "blur-[4px] opacity-70 pointer-events-none select-none" : ""
-        }`}
-      >
+      <footer className="bg-[#1995AD] text-white py-3 px-6 text-center text-xs">
         <p className="font-semibold text-white/90">AssetGuard_2620 - GlobalNet Telecom</p>
       </footer>
     </div>
