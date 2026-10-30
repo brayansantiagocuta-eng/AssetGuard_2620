@@ -190,29 +190,24 @@ export default function LoginPage() {
       setRecovery((r) => ({ ...r, err: "Ingresa un correo corporativo válido." }));
       return;
     }
-    const pwdErr = validatePasswordRecovery(recovery.pwd, recovery.confirm);
-    if (pwdErr) {
-      setRecovery((r) => ({ ...r, err: pwdErr }));
-      return;
-    }
 
-    setRecovery((r) => ({ ...r, isSubmitting: true, err: null }));
+    setRecovery((r) => ({ ...r, isSubmitting: true, err: null, success: null }));
     try {
-      const res = await fetch("/api/auth/reset-password", {
+      const res = await fetch("/api/auth/password-recovery", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, token: "TOKEN_VERIFIED", newPassword: recovery.pwd }),
+        body: JSON.stringify({ email: cleanEmail }),
       });
-      if (!res.ok) throw new Error((await res.json()).message || "No se pudo actualizar la contraseña.");
-      setRecovery((r) => ({ ...r, success: "¡Contraseña actualizada exitosamente!" }));
-      setForm((f) => ({ ...f, email: cleanEmail, password: recovery.pwd }));
-      setFeedback({ err: null, success: null });
-      setTimeout(() => {
-        setRecovery((r) => ({ ...r, isOpen: false }));
-        setFeedback({ err: null, success: "Contraseña actualizada. Puedes ingresar al sistema ahora." });
-      }, 1200);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "No se pudo procesar la solicitud de recuperación.");
+      }
+      setRecovery((r) => ({
+        ...r,
+        success: data.message || "Hemos enviado un enlace de recuperación a tu correo electrónico. Por favor revisa tu bandeja de entrada o spam.",
+      }));
     } catch (err: any) {
-      setRecovery((r) => ({ ...r, err: err.message || "Error al actualizar la contraseña." }));
+      setRecovery((r) => ({ ...r, err: err.message || "Error al solicitar el enlace de recuperación." }));
     } finally {
       setRecovery((r) => ({ ...r, isSubmitting: false }));
     }
@@ -508,120 +503,90 @@ export default function LoginPage() {
             <div className="bg-gradient-to-r from-[#172B4D] via-[#1B4965] to-[#1995AD] px-6 py-4 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-white/15 flex items-center justify-center text-white">
-                  <KeyRound className="h-5 w-5" />
+                  <Mail className="h-5 w-5" />
                 </div>
                 <div>
                   <h3 className="font-title text-lg tracking-wide text-white">Recuperar Contraseña</h3>
-                  <p className="text-xs text-[#A1D6E2]">Define tu nueva clave de acceso</p>
+                  <p className="text-xs text-[#A1D6E2]">Enlace seguro de verificación por correo</p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setRecovery((r) => ({ ...r, isOpen: false }))}
+                onClick={() => setRecovery((r) => ({ ...r, isOpen: false, success: null, err: null }))}
                 className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleRecoverySubmit} className="p-5 sm:p-6 space-y-4">
-              {recovery.err && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                  <span>{recovery.err}</span>
+            {recovery.success ? (
+              <div className="p-6 space-y-4 text-center">
+                <div className="h-14 w-14 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
+                  <CheckCircle2 className="h-8 w-8" />
                 </div>
-              )}
-              {recovery.success && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-800 flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>{recovery.success}</span>
+                <div className="space-y-1.5">
+                  <h4 className="font-title text-lg text-[#172B4D]">Enlace Enviado</h4>
+                  <p className="text-xs sm:text-sm text-[#172B4D]/80 leading-relaxed">
+                    Hemos enviado el enlace de verificación a <strong>{recovery.email}</strong>. Revisa tu bandeja de entrada o spam para acceder al módulo seguro de cambio de contraseña.
+                  </p>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Correo Electrónico</label>
-                <div className="relative">
-                  <Mail className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="ej: usuario@globalnet.com"
-                    value={recovery.email}
-                    onChange={(e) => setRecovery((r) => ({ ...r, email: e.target.value, err: null }))}
-                    className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
-                  />
+                <div className="p-3 rounded-xl bg-[#E2F1F5] border border-[#1995AD]/30 text-xs text-[#172B4D]">
+                  Por seguridad, el enlace tiene una vigencia de <strong>30 minutos</strong> y es de un solo uso.
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Nueva Contraseña</label>
-                <div className="relative">
-                  <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={recovery.showPwd ? "text" : "password"}
-                    required
-                    maxLength={20}
-                    placeholder="Ingresa tu nueva contraseña"
-                    value={recovery.pwd}
-                    onChange={(e) => {
-                      const clean = e.target.value.split("").filter((ch) => ALLOWED_PWD_REGEX.test(ch)).join("").slice(0, 20);
-                      setRecovery((r) => ({ ...r, pwd: clean, err: null }));
-                    }}
-                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setRecovery((r) => ({ ...r, showPwd: !r.showPwd }))}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
-                  >
-                    {recovery.showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Confirmar Contraseña</label>
-                <div className="relative">
-                  <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={recovery.showConfirm ? "text" : "password"}
-                    required
-                    maxLength={20}
-                    placeholder="Repite la nueva contraseña"
-                    value={recovery.confirm}
-                    onChange={(e) => {
-                      const clean = e.target.value.split("").filter((ch) => ALLOWED_PWD_REGEX.test(ch)).join("").slice(0, 20);
-                      setRecovery((r) => ({ ...r, confirm: clean, err: null }));
-                    }}
-                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setRecovery((r) => ({ ...r, showConfirm: !r.showConfirm }))}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
-                  >
-                    {recovery.showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F1F1F2]">
                 <button
                   type="button"
-                  onClick={() => setRecovery((r) => ({ ...r, isOpen: false }))}
-                  className="px-4 py-2.5 rounded-xl bg-[#F1F1F2] hover:bg-[#BCBABE]/40 text-[#172B4D] font-bold text-xs transition-colors cursor-pointer"
+                  onClick={() => setRecovery((r) => ({ ...r, isOpen: false, success: null, err: null }))}
+                  className="w-full py-3 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={recovery.isSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {recovery.isSubmitting ? "Guardando..." : "Guardar Contraseña"}
+                  Entendido / Cerrar
                 </button>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={handleRecoverySubmit} className="p-5 sm:p-6 space-y-4">
+                <p className="text-xs sm:text-sm text-[#172B4D]/75 leading-relaxed">
+                  Ingresa tu correo electrónico corporativo registrado. Te enviaremos un correo con el enlace de acceso directo para definir tu nueva contraseña.
+                </p>
+
+                {recovery.err && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                    <span>{recovery.err}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">Correo Electrónico Corporativo</label>
+                  <div className="relative">
+                    <Mail className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      required
+                      placeholder="ej: usuario@globalnet.com"
+                      value={recovery.email}
+                      onChange={(e) => setRecovery((r) => ({ ...r, email: e.target.value, err: null }))}
+                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-[#F1F1F2]">
+                  <button
+                    type="button"
+                    onClick={() => setRecovery((r) => ({ ...r, isOpen: false, err: null }))}
+                    className="px-4 py-2.5 rounded-xl bg-[#F1F1F2] hover:bg-[#BCBABE]/40 text-[#172B4D] font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={recovery.isSubmitting}
+                    className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <span>{recovery.isSubmitting ? "Enviando correo..." : "Enviar Enlace por Correo"}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>,
         document.body

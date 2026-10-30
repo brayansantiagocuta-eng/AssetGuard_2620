@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, ShieldAlert } from "lucide-react";
 
 const ALLOWED_PASSWORD_REGEX = /^[a-zA-Z0-9$!#%&]*$/;
 
@@ -12,6 +12,18 @@ function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const initialEmail = searchParams.get("email") || "";
   const token = searchParams.get("token") || "";
+
+  // Estado de validación del enlace
+  const [tokenStatus, setTokenStatus] = useState<"CHECKING" | "VALID" | "INVALID">(() => {
+    if (!token || !initialEmail) return "INVALID";
+    return "CHECKING";
+  });
+  const [tokenError, setTokenError] = useState<string | null>(() => {
+    if (!token || !initialEmail) {
+      return "Para cambiar tu contraseña de forma segura, debes acceder exclusivamente mediante el enlace único enviado a tu correo electrónico corporativo.";
+    }
+    return null;
+  });
 
   const [email, setEmail] = useState(initialEmail);
   const [newPassword, setNewPassword] = useState("");
@@ -22,6 +34,49 @@ function ResetPasswordContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Verificación obligatoria de token contra el backend al cargar la página
+  useEffect(() => {
+    if (!token || !initialEmail) {
+      setTokenStatus("INVALID");
+      setTokenError(
+        "No se detectó un enlace de verificación válido. Por seguridad institucional, no es posible acceder directamente a este formulario sin el enlace enviado a tu correo."
+      );
+      return;
+    }
+
+    let isSubscribed = true;
+    const verifyTokenOnServer = async () => {
+      try {
+        const res = await fetch(
+          `/api/auth/verify-reset-token?token=${encodeURIComponent(token)}&email=${encodeURIComponent(initialEmail)}`
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!isSubscribed) return;
+
+        if (res.ok && data.valid) {
+          setTokenStatus("VALID");
+          setTokenError(null);
+          setEmail(initialEmail);
+        } else {
+          setTokenStatus("INVALID");
+          setTokenError(
+            data.message ||
+              "El enlace de recuperación es inválido, ya fue utilizado o ha expirado (validez máxima de 30 minutos). Por favor solicita uno nuevo desde el inicio de sesión."
+          );
+        }
+      } catch (err) {
+        if (!isSubscribed) return;
+        setTokenStatus("INVALID");
+        setTokenError("No se pudo verificar la validez del enlace con el servidor de seguridad.");
+      }
+    };
+
+    verifyTokenOnServer();
+    return () => {
+      isSubscribed = false;
+    };
+  }, [token, initialEmail]);
 
   const getPasswordErrors = (pwd: string): string[] => {
     if (!pwd) return ["La contraseña es obligatoria."];
@@ -72,7 +127,7 @@ function ResetPasswordContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: emailTrimmed,
-          token: token || "TOKEN_VERIFIED",
+          token: token,
           newPassword: newPassword,
         }),
       });
@@ -97,6 +152,55 @@ function ResetPasswordContent() {
     }
   };
 
+  // 1. PANTALLA DE CARGA / VERIFICACIÓN DEL ENLACE
+  if (tokenStatus === "CHECKING") {
+    return (
+      <div className="w-full max-w-md bg-white rounded-3xl border-2 border-[#1995AD]/40 shadow-2xl p-7 sm:p-9 space-y-5 text-center">
+        <div className="h-14 w-14 rounded-2xl bg-[#1995AD]/15 border border-[#1995AD]/30 text-[#1995AD] flex items-center justify-center mx-auto animate-pulse">
+          <Lock className="h-7 w-7" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="font-title text-xl text-[#172B4D]">Verificando Enlace de Seguridad</h2>
+          <p className="text-xs text-[#172B4D]/70">Comprobando validez y vigencia del token de correo...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. PANTALLA DE BLOQUEO DE SEGURIDAD (Acceso directo no permitido o token inválido)
+  if (tokenStatus === "INVALID") {
+    return (
+      <div className="w-full max-w-md bg-white rounded-3xl border-2 border-red-200 shadow-2xl p-7 sm:p-9 space-y-6 text-center">
+        <div className="h-16 w-16 rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mx-auto shadow-xs">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="font-title text-xl sm:text-2xl text-[#172B4D] tracking-tight">
+            Acceso Restringido o Enlace Expirado
+          </h1>
+          <p className="text-xs sm:text-sm text-[#172B4D]/75 leading-relaxed">
+            {tokenError}
+          </p>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-[#F1F1F2] border border-[#AFC8D0]/60 text-xs text-[#172B4D]/80">
+          Los enlaces de recuperación tienen una vigencia de <strong>30 minutos</strong> y son de <strong>un solo uso</strong>.
+        </div>
+
+        <div className="pt-2">
+          <Link
+            href="/login"
+            className="w-full py-3.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <span>Ir a Inicio de Sesión y Solicitar Enlace</span>
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. INTERFAZ ACTUAL DE CAMBIAR CONTRASEÑA (Habilitada únicamente con enlace válido)
   return (
     <div className="w-full max-w-md bg-white rounded-3xl border-2 border-[#1995AD]/40 shadow-2xl p-7 sm:p-9 space-y-6">
       <div className="text-center space-y-2">
@@ -134,10 +238,11 @@ function ResetPasswordContent() {
             <input
               type="email"
               required
+              readOnly={!!initialEmail}
               placeholder="ej: usuario@globalnet.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-white text-sm text-[#172B4D] font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 text-sm text-[#172B4D] font-semibold focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
             />
           </div>
 

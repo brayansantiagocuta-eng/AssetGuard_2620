@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,6 +24,8 @@ public class AuthController {
     private final SessionCookie sessionCookie;
     private final LoginRateLimiter loginRateLimiter;
     private final JdbcTemplate jdbcTemplate;
+    private final PasswordResetTokenService passwordResetTokenService;
+    private final EmailService emailService;
 
     public AuthController(
             UserRepository userRepository,
@@ -30,13 +33,17 @@ public class AuthController {
             SessionService sessionService,
             SessionCookie sessionCookie,
             LoginRateLimiter loginRateLimiter,
-            JdbcTemplate jdbcTemplate) {
+            JdbcTemplate jdbcTemplate,
+            PasswordResetTokenService passwordResetTokenService,
+            EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.sessionService = sessionService;
         this.sessionCookie = sessionCookie;
         this.loginRateLimiter = loginRateLimiter;
         this.jdbcTemplate = jdbcTemplate;
+        this.passwordResetTokenService = passwordResetTokenService;
+        this.emailService = emailService;
     }
 
     @PostMapping("/login")
@@ -94,6 +101,10 @@ public class AuthController {
         return new MessageResponse("Sesión cerrada.");
     }
 
+    /**
+     * Solicitud de recuperación de contraseña:
+     * Genera un token único y envía un correo real al destinatario con el enlace directo.
+     */
     @PostMapping("/password-recovery")
     public MessageResponse requestPasswordRecovery(
             @RequestBody PasswordRecoveryRequest request,
@@ -103,30 +114,76 @@ public class AuthController {
         }
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         Optional<UserRepository.StoredUser> storedUser = userRepository.findByEmail(email);
-        Long targetUserId = storedUser.map(u -> u.user().id()).orElse(null);
 
-        jdbcTemplate.update(
-                """
-                INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
-                VALUES (?, 'PASSWORD_RESET_REQUESTED', 'users', ?, NULL, ?::jsonb, ?)
-                """,
-                targetUserId,
-                targetUserId,
-                "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"PENDING\"}",
-                clientIp(httpRequest));
+        if (storedUser.isPresent()) {
+            var user = storedUser.get();
+            String token = passwordResetTokenService.createToken(user.user().id(), email);
+            emailService.sendPasswordResetEmail(email, user.user().fullName(), token);
 
-        return new MessageResponse("Solicitud enviada al Administrador del Sistema.");
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
+                    VALUES (?, 'PASSWORD_RESET_REQUESTED', 'users', ?, NULL, ?::jsonb, ?)
+                    """,
+                    user.user().id(),
+                    user.user().id(),
+                    "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"EMAIL_SENT\"}",
+                    clientIp(httpRequest));
+        } else {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
+                    VALUES (NULL, 'PASSWORD_RESET_UNKNOWN_EMAIL', 'users', NULL, NULL, ?::jsonb, ?)
+                    """,
+                    "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"USER_NOT_FOUND\"}",
+                    clientIp(httpRequest));
+        }
+
+        return new MessageResponse("Hemos enviado un enlace de recuperación a tu correo electrónico. Por favor revisa tu bandeja de entrada o spam.");
     }
 
+    /**
+     * Verifica si el token del enlace es válido y no ha expirado antes de habilitar el formulario.
+     */
+    @GetMapping("/verify-reset-token")
+    public TokenVerificationResponse verifyResetToken(
+            @RequestParam("token") String token,
+            @RequestParam("email") String email) {
+        Optional<Long> userIdOpt = passwordResetTokenService.verifyToken(token, email);
+        if (userIdOpt.isPresent()) {
+            return new TokenVerificationResponse(true, "Enlace verificado correctamente.");
+        }
+        return new TokenVerificationResponse(false, "El enlace de recuperación es inválido, ya fue utilizado o ha expirado.");
+    }
+
+    /**
+     * Restablece la contraseña validando estrictamente el token de un solo uso.
+     */
     @PostMapping("/reset-password")
     public MessageResponse resetPasswordPublic(
             @RequestBody PublicResetPasswordRequest request,
             HttpServletRequest httpRequest) {
         if (request == null || request.email() == null || request.email().isBlank()
+                || request.token() == null || request.token().isBlank()
                 || request.newPassword() == null || request.newPassword().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Todos los campos son obligatorios.");
         }
+
         String email = request.email().trim().toLowerCase(Locale.ROOT);
+        String token = request.token().trim();
+
+        // 1. Validar Token Único Expirable
+        Optional<Long> userIdOpt = passwordResetTokenService.verifyToken(token, email);
+        if (userIdOpt.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "El enlace de recuperación es inválido, ya fue utilizado o ha expirado. Por favor solicita un nuevo enlace desde el inicio de sesión."
+            );
+        }
+
+        Long userId = userIdOpt.get();
+
+        // 2. Validar Requisitos de Seguridad de Contraseña
         String newPassword = request.newPassword().trim();
         if (newPassword.length() < 6 || newPassword.length() > 20) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña debe tener entre 6 y 20 caracteres.");
@@ -135,23 +192,41 @@ public class AuthController {
                 || !newPassword.matches(".*[a-z].*")
                 || !newPassword.matches(".*[0-9].*")
                 || !newPassword.matches(".*[@#$*_\\-!%&].*")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña debe combinar mayúsculas (A-Z), minúsculas (a-z), números (0-9) y símbolos (@, #, $, *, _, -).");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña debe combinar mayúsculas (A-Z), minúsculas (a-z), números (0-9) y símbolos (@, #, $, *, _, -, !, %, &).");
         }
-        Optional<UserRepository.StoredUser> stored = userRepository.findByEmail(email);
-        if (stored.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No se encontró ningún usuario con ese correo.");
+
+        // 3. Validar Historial de Contraseñas
+        if (userRepository.isPasswordPreviouslyUsed(userId, newPassword, passwordHasher)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puedes reutilizar una contraseña anterior. Por seguridad institucional, ingresa una clave nueva.");
         }
-        if (userRepository.isPasswordPreviouslyUsed(stored.get().user().id(), newPassword, passwordHasher)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puedes reutilizar una contraseña anterior. Por seguridad, ingresa una clave nueva.");
-        }
-        userRepository.updatePassword(stored.get().user().id(), passwordHasher.hashBcrypt(newPassword));
+
+        // 4. Actualizar Contraseña y Consumir Token
+        userRepository.updatePassword(userId, passwordHasher.hashBcrypt(newPassword));
+        passwordResetTokenService.markAsUsed(token);
+
+        // 5. Restablecer Límites de Tasa
         loginRateLimiter.reset(loginRateLimiter.key(email, clientIp(httpRequest)));
         loginRateLimiter.reset(loginRateLimiter.key(email, "127.0.0.1"));
         loginRateLimiter.reset(loginRateLimiter.key(email, "0:0:0:0:0:0:0:1"));
-        return new MessageResponse("Contraseña actualizada exitosamente en el sistema.");
+
+        // 6. Auditoría
+        jdbcTemplate.update(
+                """
+                INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
+                VALUES (?, 'PASSWORD_RESET_COMPLETED', 'users', ?, NULL, ?::jsonb, ?)
+                """,
+                userId,
+                userId,
+                "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"SUCCESS\"}",
+                clientIp(httpRequest));
+
+        return new MessageResponse("Contraseña actualizada exitosamente en el sistema. Ya puedes iniciar sesión con tu nueva contraseña.");
     }
 
     public record PublicResetPasswordRequest(String email, String token, String newPassword) {
+    }
+
+    public record TokenVerificationResponse(boolean valid, String message) {
     }
 
     @GetMapping("/database")
