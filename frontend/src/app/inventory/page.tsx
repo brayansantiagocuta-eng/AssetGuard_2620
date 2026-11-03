@@ -1377,7 +1377,7 @@ export default function InventoryPage() {
         )}
 
         {/* Desplegable limpio de Gráfica e Informe por Categoría (Exclusivo para Administradores e Inspectores) */}
-        {role !== "TECHNICIAN" && (
+        {(role === "ADMIN" || role === "INSPECTOR") && (
         <div className="bg-white rounded-3xl border-2 border-[#AFC8D0]/70 shadow-sm overflow-hidden">
           <button
             type="button"
@@ -2190,14 +2190,16 @@ export default function InventoryPage() {
                         <span>Ver cálculo</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPreviewQrAsset(asset)}
-                        title="Ver Código QR Oficial y Ficha"
-                        className="p-2 rounded-xl text-[#1995AD] bg-[#A1D6E2]/25 hover:bg-[#A1D6E2]/50 border border-[#1995AD]/30 transition-colors cursor-pointer"
-                      >
-                        <QrCode className="h-4 w-4" />
-                      </button>
+                      {(role === "ADMIN" || role === "INSPECTOR") && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewQrAsset(asset)}
+                          title="Ver Código QR Oficial y Ficha"
+                          className="p-2 rounded-xl text-[#1995AD] bg-[#A1D6E2]/25 hover:bg-[#A1D6E2]/50 border border-[#1995AD]/30 transition-colors cursor-pointer"
+                        >
+                          <QrCode className="h-4 w-4" />
+                        </button>
+                      )}
 
                       {(role === "INSPECTOR" || role === "ADMIN") && (
                         <button
