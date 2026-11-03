@@ -146,17 +146,17 @@ export default function LoansPage() {
   const [returnLoanMutation, { loading: returningLoan }] = useMutation(RETURN_LOAN_MUTATION);
 
   // 3. Estados locales persistentes
-  const [localLoans, setLocalLoans] = useState<UnifiedLoanItem[]>(() => {
-    if (typeof window === "undefined") return INITIAL_FALLBACK_LOANS;
+  const [localLoans, setLocalLoans] = useState<UnifiedLoanItem[]>(INITIAL_FALLBACK_LOANS);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOANS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) setLocalLoans(parsed);
       }
     } catch {}
-    return INITIAL_FALLBACK_LOANS;
-  });
+  }, []);
 
   const saveLoansState = (items: UnifiedLoanItem[]) => {
     setLocalLoans(items);

@@ -315,25 +315,25 @@ const AUTHORIZED_BRANDS_BY_CATEGORY: Record<string, string[]> = {
 
 export default function InventoryPage() {
   const { role, user } = useAuth();
-  const [assets, setAssets] = useState<AssetItem[]>(() => {
-    if (typeof window === "undefined") return INITIAL_ASSETS;
+  const [assets, setAssets] = useState<AssetItem[]>(INITIAL_ASSETS);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_REGISTERED);
       if (saved) {
         const custom: AssetItem[] = JSON.parse(saved);
         if (Array.isArray(custom) && custom.length > 0) {
           const customSerials = new Set(custom.map((x) => x.serialNumber.toUpperCase()));
-          return [
+          setAssets([
             ...custom,
             ...INITIAL_ASSETS.filter((a) => !customSerials.has(a.serialNumber.toUpperCase())),
-          ];
+          ]);
         }
       }
     } catch {
       // ignore
     }
-    return INITIAL_ASSETS;
-  });
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [locationFilter, setLocationFilter] = useState<string>("ALL");
