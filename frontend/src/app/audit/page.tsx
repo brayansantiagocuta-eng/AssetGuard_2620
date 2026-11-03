@@ -284,7 +284,6 @@ export default function AuditPage() {
     return new Date().toISOString().split("T")[0];
   });
   const [isHistoryDateOpen, setIsHistoryDateOpen] = useState<boolean>(false);
-  const [isActiveRecordsCollapsed, setIsActiveRecordsCollapsed] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [auditNotice, setAuditNotice] = useState<{ type: "success" | "info"; text: string } | null>(null);
 
@@ -449,12 +448,16 @@ export default function AuditPage() {
         setDailyReports(updatedReports);
       }
 
-      const pastLogIds = pastLogs.map((l) => l.id);
-      const unhiddenPastIds = pastLogIds.filter((id) => !hiddenLogIds.includes(id));
-      if (unhiddenPastIds.length > 0) {
-        const nextHidden = Array.from(new Set([...hiddenLogIds, ...pastLogIds]));
-        localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
-        setHiddenLogIds(nextHidden);
+      // Solo ocultar automáticamente los días pasados en la primera carga (si no se han restaurado manualmente)
+      const wasRestoredManually = sessionStorage.getItem("assetguard_audit_restored_all") === "true";
+      if (!wasRestoredManually) {
+        const pastLogIds = pastLogs.map((l) => l.id);
+        const unhiddenPastIds = pastLogIds.filter((id) => !hiddenLogIds.includes(id));
+        if (unhiddenPastIds.length > 0) {
+          const nextHidden = Array.from(new Set([...hiddenLogIds, ...pastLogIds]));
+          localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+          setHiddenLogIds(nextHidden);
+        }
       }
     } catch {
       // ignore
@@ -594,44 +597,27 @@ export default function AuditPage() {
     } catch {}
     setTimeout(() => {
       setIsRefreshing(false);
-      setAuditNotice({
-        type: "info",
-        text: "Bitácora e informes sincronizados y actualizados en tiempo real.",
-      });
     }, 550);
   };
 
-  const handleHideSingleLog = (logId: string) => {
-    const nextHidden = Array.from(new Set([...hiddenLogIds, logId]));
-    setHiddenLogIds(nextHidden);
-    try {
-      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
-    } catch {}
-  };
-
-  const handleHideAllVisibleLogs = () => {
-    if (filteredLogs.length === 0) return;
-    const visibleIds = filteredLogs.map((l) => l.id);
-    const nextHidden = Array.from(new Set([...hiddenLogIds, ...visibleIds]));
-    setHiddenLogIds(nextHidden);
-    try {
-      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
-    } catch {}
-    setAuditNotice({
-      type: "info",
-      text: `Se ocultaron ${visibleIds.length} registro(s) de la vista activa. Puedes restaurarlos pulsando "Ver todos los activos".`,
-    });
-  };
-
-  const handleResetVisibility = () => {
-    setHiddenLogIds([]);
-    try {
-      localStorage.removeItem(STORAGE_KEY_HIDDEN_LOGS);
-    } catch {}
-    setAuditNotice({
-      type: "info",
-      text: "Se ha restaurado la visibilidad de todos los movimientos en la bitácora activa.",
-    });
+  const handleToggleVisibility = () => {
+    if (filteredLogs.length > 0) {
+      // Ocultar todos los movimientos actualmente visibles
+      const visibleIds = filteredLogs.map((l) => l.id);
+      const nextHidden = Array.from(new Set([...hiddenLogIds, ...visibleIds]));
+      setHiddenLogIds(nextHidden);
+      try {
+        sessionStorage.removeItem("assetguard_audit_restored_all");
+        localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+      } catch {}
+    } else {
+      // Mostrar todos los movimientos ocultos
+      setHiddenLogIds([]);
+      try {
+        sessionStorage.setItem("assetguard_audit_restored_all", "true");
+        localStorage.removeItem(STORAGE_KEY_HIDDEN_LOGS);
+      } catch {}
+    }
   };
 
   // Requisito 3: Registros diarios filtrados por fecha al final de la página
@@ -928,62 +914,31 @@ export default function AuditPage() {
             <Bot className="h-4 w-4 text-amber-400" />
             <span>Robot de Monitoreo CRON ({cronJobs.length})</span>
           </button>
-
-          {activeTab === "LOGS" && (
-            <button
-              type="button"
-              onClick={() => setIsActiveRecordsCollapsed(!isActiveRecordsCollapsed)}
-              className="px-4 py-2.5 rounded-2xl text-xs font-bold bg-white text-[#172B4D] border border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2] transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
-            >
-              {isActiveRecordsCollapsed ? (
-                <>
-                  <Eye className="h-4 w-4 text-[#1995AD]" />
-                  <span>Mostrar registros</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-4 w-4 text-[#1995AD]" />
-                  <span>Ocultar registros</span>
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </>
-              )}
-            </button>
-          )}
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
-          {activeTab === "LOGS" && filteredLogs.length > 0 && !isActiveRecordsCollapsed && (
-            <button
-              type="button"
-              onClick={handleHideAllVisibleLogs}
-              className="inline-flex items-center gap-1 text-[#172B4D]/75 hover:text-[#172B4D] font-bold bg-[#F1F1F2] hover:bg-[#AFC8D0]/40 px-3 py-1.5 rounded-xl border border-[#AFC8D0]/60 transition-colors cursor-pointer"
-            >
-              <EyeOff className="h-3.5 w-3.5 text-[#1995AD]" />
-              <span>Archivar/Ocultar visibles ({filteredLogs.length})</span>
-            </button>
-          )}
-
-          {hiddenLogIds.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[#172B4D]/60 font-medium">
-                ({hiddenLogIds.length} archivado/oculto)
-              </span>
-              <button
-                type="button"
-                onClick={handleResetVisibility}
-                className="inline-flex items-center gap-1 text-[#1995AD] font-bold hover:underline cursor-pointer"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>Ver todos los activos</span>
-              </button>
-            </div>
-          )}
-        </div>
+        {activeTab === "LOGS" && (
+          <button
+            type="button"
+            onClick={handleToggleVisibility}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-bold bg-white text-[#172B4D] border border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2] transition-all cursor-pointer shadow-2xs"
+          >
+            {filteredLogs.length > 0 ? (
+              <>
+                <EyeOff className="h-4 w-4 text-[#1995AD]" />
+                <span>Ocultar registros ({filteredLogs.length})</span>
+              </>
+            ) : (
+              <>
+                <Eye className="h-4 w-4 text-[#1995AD]" />
+                <span>Mostrar registros ({hiddenLogIds.length})</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       {/* CONTENIDO 1: BITÁCORA DE MOVIMIENTOS ACTIVOS */}
-      {activeTab === "LOGS" && !isActiveRecordsCollapsed && (
+      {activeTab === "LOGS" && (
         <div
           className={`space-y-4 transition-all duration-300 ${
             isRefreshing ? "opacity-60 scale-[0.995]" : "opacity-100 scale-100"
@@ -1038,13 +993,12 @@ export default function AuditPage() {
                     <th className="px-5 py-3.5">Acción Realizada</th>
                     <th className="px-5 py-3.5">Detalle / Explicación</th>
                     <th className="px-5 py-3.5">IP de Conexión</th>
-                    <th className="px-4 py-3.5 text-right">Ocultar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F1F1F2]">
                   {filteredLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-[#BCBABE]">
+                      <td colSpan={5} className="py-12 text-center text-[#BCBABE]">
                         <Info className="h-8 w-8 mx-auto mb-2 text-[#AFC8D0]" />
                         <p className="text-sm font-semibold text-[#172B4D]">
                           La cuenta de movimientos activos está en 0 para esta jornada.
@@ -1118,18 +1072,6 @@ export default function AuditPage() {
                           {/* IP de Conexión */}
                           <td className="px-5 py-4 whitespace-nowrap font-mono text-xs text-[#172B4D]/60">
                             {log.ipAddress}
-                          </td>
-
-                          {/* Botón para ocultar registro individual */}
-                          <td className="px-4 py-4 whitespace-nowrap text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleHideSingleLog(log.id)}
-                              title="Ocultar este registro de la vista activa"
-                              className="p-2 rounded-xl text-[#172B4D]/50 hover:text-[#1995AD] hover:bg-[#1995AD]/10 transition-colors cursor-pointer"
-                            >
-                              <EyeOff className="h-4 w-4" />
-                            </button>
                           </td>
                         </tr>
                       );
