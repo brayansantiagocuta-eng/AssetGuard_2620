@@ -68,56 +68,25 @@ public class StandaloneRecoveryMailer {
                 System.exit(2);
             }
 
-            // Verificar si el backend nuevo ya despachó el correo (EMAIL_SENT_SMTP en los últimos 15 segundos)
+            // Invalidar tokens anteriores y generar SIEMPRE un token nuevo y único para cada correo solicitado
             try (PreparedStatement ps = conn.prepareStatement(
-                    """
-                    SELECT new_value FROM audit_logs
-                    WHERE user_id = ? AND action = 'PASSWORD_RESET_REQUESTED'
-                      AND created_at > NOW() - INTERVAL '15 seconds'
-                    ORDER BY id DESC LIMIT 1
-                    """)) {
+                    "UPDATE password_reset_tokens SET used = TRUE WHERE user_id = ? AND used = FALSE")) {
                 ps.setLong(1, userId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        String val = rs.getString("new_value");
-                        if (val != null && val.contains("EMAIL_SENT_SMTP")) {
-                            System.out.println("ALREADY_SENT");
-                            System.exit(0);
-                        }
-                    }
-                }
+                ps.executeUpdate();
             }
 
-            // Obtener el token vigente de password_reset_tokens
-            String token = null;
+            byte[] randomBytes = new byte[32];
+            new java.security.SecureRandom().nextBytes(randomBytes);
+            String token = java.util.HexFormat.of().formatHex(randomBytes);
             try (PreparedStatement ps = conn.prepareStatement(
                     """
-                    SELECT token FROM password_reset_tokens
-                    WHERE user_id = ? AND used = FALSE AND expires_at > NOW()
-                    ORDER BY created_at DESC LIMIT 1
+                    INSERT INTO password_reset_tokens (token, user_id, email, expires_at, used, created_at)
+                    VALUES (?, ?, ?, NOW() + INTERVAL '30 minutes', FALSE, NOW())
                     """)) {
-                ps.setLong(1, userId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        token = rs.getString("token");
-                    }
-                }
-            }
-
-            if (token == null) {
-                byte[] randomBytes = new byte[32];
-                new java.security.SecureRandom().nextBytes(randomBytes);
-                token = java.util.HexFormat.of().formatHex(randomBytes);
-                try (PreparedStatement ps = conn.prepareStatement(
-                        """
-                        INSERT INTO password_reset_tokens (token, user_id, email, expires_at, used, created_at)
-                        VALUES (?, ?, ?, NOW() + INTERVAL '30 minutes', FALSE, NOW())
-                        """)) {
-                    ps.setString(1, token);
-                    ps.setLong(2, userId);
-                    ps.setString(3, email);
-                    ps.executeUpdate();
-                }
+                ps.setString(1, token);
+                ps.setLong(2, userId);
+                ps.setString(3, email);
+                ps.executeUpdate();
             }
 
             String smtpUser = "brayansantiagocuta@gmail.com";

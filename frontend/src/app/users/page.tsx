@@ -390,7 +390,8 @@ export default function UsersManagementPage() {
                   <div className="relative">
                     <Mail className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
-                      type="email"
+                      type="text"
+                      inputMode="email"
                       required
                       placeholder="ej: nombre.apellido@globalnet.com"
                       value={newForm.email}
@@ -401,6 +402,7 @@ export default function UsersManagementPage() {
                       name="assetguard_new_email_unique_input"
                       id="assetguard_new_email_input"
                       data-lpignore="true"
+                      data-1p-ignore="true"
                       data-form-type="other"
                       onChange={(e) => setNewForm({ ...newForm, email: e.target.value })}
                       onBlur={() => setTouched({ ...touched, email: true })}
@@ -451,19 +453,21 @@ export default function UsersManagementPage() {
                   <div className="relative">
                     <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
-                      type={newForm.showPwd ? "text" : "password"}
+                      type="text"
                       required
                       maxLength={20}
                       placeholder="Define una contraseña segura"
                       value={newForm.password}
-                      autoComplete="new-password"
+                      autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="off"
                       spellCheck="false"
                       name="assetguard_new_password_unique_input"
                       id="assetguard_new_password_input"
                       data-lpignore="true"
+                      data-1p-ignore="true"
                       data-form-type="other"
+                      style={!newForm.showPwd && newForm.password ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties) : undefined}
                       onChange={(e) => {
                         const clean = e.target.value.split("").filter((ch) => ALLOWED_PASSWORD_REGEX.test(ch)).join("").slice(0, 20);
                         setNewForm({ ...newForm, password: clean });

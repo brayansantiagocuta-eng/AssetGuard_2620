@@ -89,39 +89,12 @@ export default function LoginPage() {
   useEffect(() => {
     setIsMounted(true);
     try {
-      // 1. Cargar las credenciales del último usuario recordado
-      const lastEmail = localStorage.getItem(LAST_USER_EMAIL_KEY)?.trim();
-      const lastPwd = localStorage.getItem(LAST_USER_PWD_KEY);
-      if (lastEmail) {
-        setForm((f) => ({
-          ...f,
-          email: lastEmail,
-          password: lastPwd || f.password,
-          remember: true,
-        }));
-        sessionStorage.setItem(TAB_EMAIL_KEY, lastEmail);
-        sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
-        return;
-      }
-
-      const tabEmail = sessionStorage.getItem(TAB_EMAIL_KEY)?.trim();
-      const tabRem = sessionStorage.getItem(TAB_REMEMBER_KEY);
-      if (tabEmail) {
-        const isRem =
-          tabRem === "true" ||
-          localStorage.getItem(`assetguard_remember_${tabEmail.toLowerCase()}`) === "true";
-        setForm((f) => ({ ...f, email: tabEmail, remember: isRem }));
-        return;
-      }
-      const savedEmail = localStorage.getItem(GLOBAL_REMEMBER_KEY)?.trim();
-      if (
-        savedEmail &&
-        localStorage.getItem(`assetguard_remember_${savedEmail.toLowerCase()}`) !== "false"
-      ) {
-        setForm((f) => ({ ...f, email: savedEmail, remember: true }));
-        sessionStorage.setItem(TAB_EMAIL_KEY, savedEmail);
-        sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
-      }
+      // Limpiar cualquier contraseña guardada previamente para que no se autocompleten correos ni contraseñas
+      localStorage.removeItem(LAST_USER_PWD_KEY);
+      localStorage.removeItem(LAST_USER_EMAIL_KEY);
+      localStorage.removeItem(GLOBAL_REMEMBER_KEY);
+      sessionStorage.removeItem(TAB_EMAIL_KEY);
+      sessionStorage.removeItem(TAB_REMEMBER_KEY);
     } catch {}
   }, []);
 
@@ -154,24 +127,6 @@ export default function LoginPage() {
       const cleanEmail = form.email.trim();
       const res = await login(cleanEmail, form.password);
       if (res.success) {
-        sessionStorage.setItem(TAB_EMAIL_KEY, cleanEmail);
-        sessionStorage.setItem(TAB_REMEMBER_KEY, String(form.remember));
-        const lower = cleanEmail.toLowerCase();
-        
-        // Guardar siempre correo y contraseña del último usuario
-        try {
-          localStorage.setItem(LAST_USER_EMAIL_KEY, cleanEmail);
-          if (form.password) {
-            localStorage.setItem(LAST_USER_PWD_KEY, form.password);
-          }
-        } catch {}
-
-        if (form.remember) {
-          localStorage.setItem(`assetguard_remember_${lower}`, "true");
-          localStorage.setItem(GLOBAL_REMEMBER_KEY, cleanEmail);
-        } else {
-          localStorage.removeItem(`assetguard_remember_${lower}`);
-        }
         setFeedback({ err: null, success: "¡Acceso concedido! Ingresando..." });
         window.dispatchEvent(new CustomEvent("assetguard:wave-start"));
         setTimeout(() => router.replace("/"), 1150);
@@ -309,7 +264,7 @@ export default function LoginPage() {
             )}
 
             {/* Formulario de Login */}
-            <form onSubmit={handleLoginSubmit} noValidate className="space-y-5">
+            <form onSubmit={handleLoginSubmit} noValidate autoComplete="off" className="space-y-5">
               <div className="space-y-5">
                 {/* CAMPO CORREO */}
                 <div
@@ -326,9 +281,16 @@ export default function LoginPage() {
                     <Mail className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-email"
-                      name="email"
-                      type="email"
-                      autoComplete="username"
+                      name="ag_auth_field_identifier"
+                      type="text"
+                      inputMode="email"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-form-type="other"
                       required
                       placeholder="usuario@globalnet.com"
                       value={form.email}
@@ -357,14 +319,21 @@ export default function LoginPage() {
                     <Lock className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-password"
-                      name="password"
-                      type={form.showPwd ? "text" : "password"}
-                      autoComplete="current-password"
+                      name="ag_auth_field_secret"
+                      type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-form-type="other"
                       required
                       placeholder="Ingresa tu contraseña"
                       value={form.password}
                       onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                       onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                      style={!form.showPwd && form.password ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties) : undefined}
                       className="w-full pl-11 pr-11 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
                     <button
@@ -419,7 +388,7 @@ export default function LoginPage() {
                     onClick={() => {
                       setRecovery({
                         isOpen: true,
-                        email: form.email.trim(),
+                        email: "",
                         pwd: "",
                         confirm: "",
                         showPwd: false,
@@ -559,7 +528,16 @@ export default function LoginPage() {
                   <div className="relative">
                     <Mail className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
-                      type="email"
+                      type="text"
+                      inputMode="email"
+                      name="ag_recovery_modal_input"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-form-type="other"
                       required
                       placeholder="ej: usuario@globalnet.com"
                       value={recovery.email}

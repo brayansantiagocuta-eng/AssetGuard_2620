@@ -18,24 +18,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
-
-    // 1. Solicitar al backend Spring Boot la creación del token y auditoría
-    const backendRes = await fetch(`${backendUrl}/api/auth/password-recovery`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    }).catch(() => null);
-
-    if (backendRes && backendRes.status === 404) {
-      const errData = await backendRes.json().catch(() => ({}));
-      return NextResponse.json(
-        { message: errData.message || "No se encontró ninguna cuenta registrada con ese correo electrónico." },
-        { status: 404 }
-      );
-    }
-
-    // 2. Ejecutar el despachador SMTP (verifica si el backend ya lo envió y, de no ser así, lo envía en el acto)
     const projectRoot = path.resolve(process.cwd(), "..");
     const classesDir = path.join(projectRoot, "backend", "target", "classes");
     const mailLibsDir = path.join(projectRoot, "backend", "target", "mail-libs", "*");

@@ -258,15 +258,22 @@ function ResetPasswordContent() {
       )}
 
       {!successMsg && (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
           <div>
             <label className="block text-xs font-bold uppercase text-[#172B4D] mb-1">
               Correo Electrónico
             </label>
             <input
-              type="email"
+              type="text"
               required
               readOnly={!!initialEmail}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              name="ag_recovery_target_acct"
+              data-lpignore="true"
+              data-form-type="other"
               placeholder="ej: usuario@globalnet.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -281,18 +288,27 @@ function ResetPasswordContent() {
             <div className="relative">
               <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type={showPassword ? "text" : "password"}
+                type="text"
                 required
                 maxLength={20}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                name="ag_reset_step1_field"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 placeholder="Ingresa tu nueva contraseña"
                 value={newPassword}
                 onChange={(e) => handlePasswordInput(e.target.value, setNewPassword)}
-                className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D]"
+                style={!showPassword && newPassword ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties) : undefined}
+                className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -306,18 +322,27 @@ function ResetPasswordContent() {
             <div className="relative">
               <Lock className="h-4 w-4 text-[#1995AD] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type={showConfirm ? "text" : "password"}
+                type="text"
                 required
                 maxLength={20}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                name="ag_reset_step2_field"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-form-type="other"
                 placeholder="Repite la contraseña"
                 value={confirmPassword}
                 onChange={(e) => handlePasswordInput(e.target.value, setConfirmPassword)}
-                className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D]"
+                style={!showConfirm && confirmPassword ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties) : undefined}
+                className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-[#BCBABE] text-sm text-[#172B4D] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD]"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
               >
                 {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
