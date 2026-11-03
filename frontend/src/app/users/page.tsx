@@ -47,9 +47,9 @@ const INITIAL_FALLBACK_USERS: UserRecord[] = [
 
 const ROLE_OPTIONS: SelectOption[] = [
   { value: "ALL", label: "Todos los Roles" },
-  { value: "ADMIN", label: "ADMIN (Administrador)" },
-  { value: "INSPECTOR", label: "INSPECTOR (Inspector)" },
-  { value: "TECHNICIAN", label: "TECHNICIAN (Técnico)" },
+  { value: "ADMIN", label: "Administrador" },
+  { value: "INSPECTOR", label: "Inspector" },
+  { value: "TECHNICIAN", label: "Técnico" },
 ];
 
 const STATUS_OPTIONS: SelectOption[] = [
@@ -59,16 +59,19 @@ const STATUS_OPTIONS: SelectOption[] = [
 ];
 
 const TABLE_ROLES: SelectOption[] = [
-  { value: "ADMIN", label: "ADMIN" },
-  { value: "INSPECTOR", label: "INSPECTOR" },
-  { value: "TECHNICIAN", label: "TECHNICIAN" },
+  { value: "ADMIN", label: "Administrador" },
+  { value: "INSPECTOR", label: "Inspector" },
+  { value: "TECHNICIAN", label: "Técnico" },
 ];
 
 const MODAL_ROLES: SelectOption[] = [
-  { value: "TECHNICIAN", label: "TECHNICIAN (Técnico)" },
-  { value: "INSPECTOR", label: "INSPECTOR (Inspector)" },
-  { value: "ADMIN", label: "ADMIN (Administrador)" },
+  { value: "TECHNICIAN", label: "Técnico" },
+  { value: "INSPECTOR", label: "Inspector" },
+  { value: "ADMIN", label: "Administrador" },
 ];
+
+const formatRoleLabel = (r: UserRole): string =>
+  r === "ADMIN" ? "Administrador" : r === "INSPECTOR" ? "Inspector" : "Técnico";
 
 // Validaciones puras desacopladas del render
 const validateUserEmail = (email: string, userList: UserRecord[]) => {
@@ -227,14 +230,14 @@ export default function UsersManagementPage() {
         void refetchUsers();
         recordAuditEvent({
           userName: "Administrador",
-          userRole: "ADMIN",
+          userRole: "Administrador",
           actionCode: "CREATE_USER",
           actionTitle: "Registro de Usuario",
-          actionDescription: `Creó la cuenta corporativa de ${u.fullName} (${newForm.email}) con rol ${u.role}`,
+          actionDescription: `Creó la cuenta corporativa de ${u.fullName} (${newForm.email}) con rol ${formatRoleLabel((u.role as UserRole) || newForm.role)}`,
           actionCategory: "USER",
           entityName: "Usuarios",
         });
-        setFeedback({ type: "success", text: `Usuario ${u.fullName} (${u.role}) registrado exitosamente.` });
+        setFeedback({ type: "success", text: `Usuario ${u.fullName} (${formatRoleLabel((u.role as UserRole) || newForm.role)}) registrado exitosamente.` });
         setShowModal(false);
       }
     } catch (err: any) {
@@ -261,14 +264,14 @@ export default function UsersManagementPage() {
     setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, role: nextRole, status: nextStatus } : u)));
     recordAuditEvent({
       userName: "Administrador",
-      userRole: "ADMIN",
+      userRole: "Administrador",
       actionCode: "UPDATE_USER",
       actionTitle: "Actualización de Usuario",
-      actionDescription: `Modificó la cuenta de ${target.fullName} (Rol: ${nextRole}, Estado: ${nextStatus})`,
+      actionDescription: `Modificó la cuenta de ${target.fullName} (Rol: ${formatRoleLabel(nextRole)}, Estado: ${nextStatus === "ACTIVE" ? "Activo" : "Inactivo"})`,
       actionCategory: "USER",
       entityName: "Usuarios",
     });
-    setFeedback({ type: "success", text: `Usuario ${target.fullName} actualizado (${nextRole} — ${nextStatus === "ACTIVE" ? "ACTIVO" : "INACTIVO"}).` });
+    setFeedback({ type: "success", text: `Usuario ${target.fullName} actualizado (${formatRoleLabel(nextRole)} — ${nextStatus === "ACTIVE" ? "ACTIVO" : "INACTIVO"}).` });
   };
 
   const filteredUsers = useMemo(() => {
@@ -348,8 +351,7 @@ export default function UsersManagementPage() {
                 <th className="py-3.5 px-5">Usuario</th>
                 <th className="py-3.5 px-5">Correo Corporativo</th>
                 <th className="py-3.5 px-5">Rol Asignado</th>
-                <th className="py-3.5 px-5">Estado</th>
-                <th className="py-3.5 px-5 text-right">Acciones</th>
+                <th className="py-3.5 px-5 text-center">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F1F1F2] text-sm">
@@ -358,18 +360,13 @@ export default function UsersManagementPage() {
                   <td className="py-4 px-5 font-bold text-[#172B4D]">{u.fullName}</td>
                   <td className="py-4 px-5 text-[#172B4D]/80">{u.email}</td>
                   <td className="py-4 px-5">
-                    <div className="w-40"><CustomSelect value={u.role} onChange={(val) => handleUpdateUser(u, { role: val as UserRole })} options={TABLE_ROLES} size="sm" /></div>
+                    <div className="w-44"><CustomSelect value={u.role} onChange={(val) => handleUpdateUser(u, { role: val as UserRole })} options={TABLE_ROLES} size="sm" /></div>
                   </td>
-                  <td className="py-4 px-5">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${u.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}`}>
-                      {u.status === "ACTIVE" ? "ACTIVO" : "INACTIVO"}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5 text-right">
+                  <td className="py-4 px-5 text-center">
                     <button
                       type="button"
                       onClick={() => handleUpdateUser(u, { status: u.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}
-                      title={u.status === "ACTIVE" ? "Inactivar cuenta" : "Activar cuenta"}
+                      title={u.status === "ACTIVE" ? "Activo — Clic para inactivar" : "Inactivo — Clic para activar"}
                       className={`inline-flex items-center justify-center h-8 w-8 rounded-xl transition-all cursor-pointer shadow-xs ${
                         u.status === "ACTIVE"
                           ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25"

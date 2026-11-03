@@ -308,7 +308,14 @@ export default function AuditPage() {
           items.map((it) => ({
             id: it.id || `AUD-${Math.random()}`,
             userName: it.userName,
-            userRole: it.userRole || "Usuario",
+            userRole:
+              it.userRole === "ADMIN"
+                ? "Administrador"
+                : it.userRole === "INSPECTOR"
+                ? "Inspector"
+                : it.userRole === "TECHNICIAN"
+                ? "Técnico"
+                : it.userRole || "Usuario",
             actionCode: it.actionCode,
             actionTitle: it.actionTitle,
             actionDescription: it.actionDescription,
@@ -568,7 +575,14 @@ export default function AuditPage() {
           items.map((it) => ({
             id: it.id || `AUD-${Math.random()}`,
             userName: it.userName,
-            userRole: it.userRole || "Usuario",
+            userRole:
+              it.userRole === "ADMIN"
+                ? "Administrador"
+                : it.userRole === "INSPECTOR"
+                ? "Inspector"
+                : it.userRole === "TECHNICIAN"
+                ? "Técnico"
+                : it.userRole || "Usuario",
             actionCode: it.actionCode,
             actionTitle: it.actionTitle,
             actionDescription: it.actionDescription,
