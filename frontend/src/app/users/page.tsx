@@ -34,10 +34,14 @@ interface UserRecord {
 
 const ALLOWED_PASSWORD_REGEX = /^[a-zA-Z0-9@#$*_!\-%&.?+=/()[\]{}|~^:;<>]*$/;
 
+const USERS_CACHE_KEY = "assetguard_users_cache_v1";
+
 const INITIAL_FALLBACK_USERS: UserRecord[] = [
-  { id: "1", fullName: "Angie Ramos", email: "valesotelo.0806@gmail.com", phone: "3001234567", role: "ADMIN", status: "ACTIVE", createdAt: "2025-01-10T08:00:00Z" },
-  { id: "2", fullName: "Ian Sanchez", email: "lasanita0204@gmail.com", phone: "3109876543", role: "INSPECTOR", status: "ACTIVE", createdAt: "2025-01-12T09:30:00Z" },
-  { id: "3", fullName: "Brayan Cuta", email: "brayansantiagocuta@gmail.com", phone: "3154567890", role: "TECHNICIAN", status: "ACTIVE", createdAt: "2025-01-15T14:20:00Z" },
+  { id: "1", fullName: "Angie Ramos", email: "valesotelo.0806@gmail.com", phone: "3001234567", role: "ADMIN", status: "ACTIVE", createdAt: "2026-10-23T08:00:00Z" },
+  { id: "2", fullName: "Ian Sanchez", email: "lasanita0204@gmail.com", phone: "3109876543", role: "INSPECTOR", status: "ACTIVE", createdAt: "2026-10-23T09:30:00Z" },
+  { id: "3", fullName: "Brayan Cuta", email: "brayansantiagocuta@gmail.com", phone: "3154567890", role: "TECHNICIAN", status: "ACTIVE", createdAt: "2026-10-23T14:20:00Z" },
+  { id: "6", fullName: "Johan Muñoz", email: "johan@gml.com", phone: "3000000000", role: "TECHNICIAN", status: "INACTIVE", createdAt: "2026-10-28T09:03:10Z" },
+  { id: "8", fullName: "johan castiblanco", email: "johanmunoz342@gmail.com", phone: "3000000000", role: "ADMIN", status: "ACTIVE", createdAt: "2026-10-30T10:45:58Z" },
 ];
 
 const ROLE_OPTIONS: SelectOption[] = [
@@ -114,7 +118,19 @@ export default function UsersManagementPage() {
   const [createUserMutation] = useMutation<any>(CREATE_USER_MUTATION);
   const [updateUserMutation] = useMutation<any>(UPDATE_USER_MUTATION);
 
-  const [users, setUsers] = useState<UserRecord[]>(INITIAL_FALLBACK_USERS);
+  const [users, setUsers] = useState<UserRecord[]>(() => {
+    if (typeof window === "undefined") return INITIAL_FALLBACK_USERS;
+    try {
+      const saved = localStorage.getItem(USERS_CACHE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length >= INITIAL_FALLBACK_USERS.length) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_FALLBACK_USERS;
+  });
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -138,19 +154,29 @@ export default function UsersManagementPage() {
 
   useEffect(() => {
     if (usersData?.users?.items?.length) {
-      setUsers(
-        usersData.users.items.map((u: any) => ({
-          id: String(u.id),
-          fullName: u.fullName,
-          email: u.email,
-          phone: "3000000000",
-          role: u.role as UserRole,
-          status: u.status as "ACTIVE" | "INACTIVE",
-          createdAt: u.createdAt || new Date().toISOString(),
-        }))
-      );
+      const mapped: UserRecord[] = usersData.users.items.map((u: any) => ({
+        id: String(u.id),
+        fullName: u.fullName,
+        email: u.email,
+        phone: "3000000000",
+        role: u.role as UserRole,
+        status: u.status as "ACTIVE" | "INACTIVE",
+        createdAt: u.createdAt || new Date().toISOString(),
+      }));
+      setUsers(mapped);
+      try {
+        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(mapped));
+      } catch {}
     }
   }, [usersData]);
+
+  useEffect(() => {
+    try {
+      if (users.length > 0) {
+        localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(users));
+      }
+    } catch {}
+  }, [users]);
 
   const activeAdminsCount = useMemo(() => users.filter((u) => u.role === "ADMIN" && u.status === "ACTIVE").length, [users]);
 

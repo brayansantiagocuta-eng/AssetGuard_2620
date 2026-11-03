@@ -90,13 +90,13 @@ public class AuthController {
         if (user == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "La sesión no está autenticada.");
         }
-        String token = SessionFilter.findCookie(request);
+        String token = SessionFilter.findToken(request);
         return new AuthResponse(user, token);
     }
 
     @PostMapping("/logout")
     public MessageResponse logout(HttpServletRequest request, HttpServletResponse response) {
-        sessionService.revoke(SessionFilter.findCookie(request));
+        sessionService.revoke(SessionFilter.findToken(request));
         sessionCookie.clear(response);
         return new MessageResponse("Sesión cerrada.");
     }

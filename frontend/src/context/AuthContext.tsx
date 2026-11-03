@@ -123,10 +123,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           "Cache-Control": "no-cache, no-store, must-revalidate",
           Pragma: "no-cache",
           ...(tabToken ? { Authorization: `Bearer ${tabToken}`, "X-Session-Token": tabToken } : {}),
+          ...(currentTabUser?.email ? { "X-Tab-User-Email": currentTabUser.email } : {}),
         },
       });
 
       if (response.status === 401) {
+        if (currentTabUser) {
+          setUser(currentTabUser);
+          return true;
+        }
         try {
           localStorage.removeItem(SESSION_USER_KEY);
           sessionStorage.removeItem(TAB_USER_KEY);
@@ -155,12 +160,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("El servidor devolvió información de usuario no válida.");
       }
 
-      setUser(body.user);
+      // Si esta pestaña ya tenía un usuario asignado y la cookie compartida devolvió otro usuario distinto,
+      // preservamos el usuario de esta pestaña para evitar colisiones entre perfiles abiertos en paralelo.
+      const resolvedUser =
+        currentTabUser && currentTabUser.email.toLowerCase() !== body.user.email.toLowerCase()
+          ? currentTabUser
+          : body.user;
+
+      setUser(resolvedUser);
       try {
-        sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(body.user));
-        sessionStorage.setItem(TAB_EMAIL_KEY, body.user.email);
-        localStorage.setItem(SESSION_USER_KEY, JSON.stringify(body.user));
-        if (body.token) {
+        sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(resolvedUser));
+        sessionStorage.setItem(TAB_EMAIL_KEY, resolvedUser.email);
+        localStorage.setItem(SESSION_USER_KEY, JSON.stringify(resolvedUser));
+        if (body.token && resolvedUser.email.toLowerCase() === body.user.email.toLowerCase()) {
           sessionStorage.setItem(TAB_TOKEN_KEY, body.token);
           localStorage.setItem(SESSION_TOKEN_KEY, body.token);
         }

@@ -12,15 +12,28 @@ const authLink = new ApolloLink((operation, forward) => {
     const token =
       sessionStorage.getItem("assetguard_tab_token") ||
       localStorage.getItem("assetguard_session_token");
-    if (token) {
-      operation.setContext(({ headers = {} }) => ({
-        headers: {
-          ...headers,
-          authorization: `Bearer ${token}`,
-          "X-Session-Token": token,
-        },
-      }));
-    }
+    const tabEmail =
+      sessionStorage.getItem("assetguard_tab_email") ||
+      (() => {
+        try {
+          const u = sessionStorage.getItem("assetguard_tab_user") || localStorage.getItem("assetguard_current_user");
+          return u ? JSON.parse(u).email : null;
+        } catch {
+          return null;
+        }
+      })();
+    operation.setContext(({ headers = {} }) => ({
+      headers: {
+        ...headers,
+        ...(token
+          ? {
+              authorization: `Bearer ${token}`,
+              "X-Session-Token": token,
+            }
+          : {}),
+        ...(tabEmail ? { "X-Tab-User-Email": tabEmail } : {}),
+      },
+    }));
   }
   return forward(operation);
 });
