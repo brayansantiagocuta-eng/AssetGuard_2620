@@ -71,33 +71,7 @@ async function getErrorMessage(response: Response, fallback: string): Promise<st
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Inicializa el usuario desde la sesión de esta pestaña específica (o fallback local) para que cada pestaña conserve su propia sesión al recargar
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      // 1. Prioridad: la sesión guardada en esta pestaña específica (sessionStorage)
-      const tabSaved = sessionStorage.getItem(TAB_USER_KEY);
-      if (tabSaved) {
-        const parsed = JSON.parse(tabSaved);
-        if (isAuthUser(parsed)) return parsed;
-      }
-      // 2. Almacenamiento local si la pestaña es nueva
-      const localSaved = localStorage.getItem(SESSION_USER_KEY);
-      if (localSaved) {
-        const parsed = JSON.parse(localSaved);
-        if (isAuthUser(parsed)) {
-          // Asigna a esta pestaña para que no dependa de otras pestañas en el futuro
-          sessionStorage.setItem(TAB_USER_KEY, localSaved);
-          sessionStorage.setItem(TAB_EMAIL_KEY, parsed.email);
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  });
-
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -110,6 +84,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (tabSaved) {
           const parsed = JSON.parse(tabSaved);
           if (isAuthUser(parsed)) currentTabUser = parsed;
+        } else {
+          const localSaved = localStorage.getItem(SESSION_USER_KEY);
+          if (localSaved) {
+            const parsed = JSON.parse(localSaved);
+            if (isAuthUser(parsed)) {
+              sessionStorage.setItem(TAB_USER_KEY, localSaved);
+              sessionStorage.setItem(TAB_EMAIL_KEY, parsed.email);
+              currentTabUser = parsed;
+            }
+          }
+        }
+        if (currentTabUser) {
+          setUser(currentTabUser);
         }
         tabToken = sessionStorage.getItem(TAB_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
       } catch {}

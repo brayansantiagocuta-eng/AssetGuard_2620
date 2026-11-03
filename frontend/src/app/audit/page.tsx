@@ -261,25 +261,23 @@ export default function AuditPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [hiddenLogIds, setHiddenLogIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_HIDDEN_LOGS);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [hiddenLogIds, setHiddenLogIds] = useState<string[]>([]);
+  const [dailyReports, setDailyReports] = useState<DailySummaryReport[]>([]);
 
-  const [dailyReports, setDailyReports] = useState<DailySummaryReport[]>(() => {
-    if (typeof window === "undefined") return [];
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_DAILY_REPORTS);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+      const savedHidden = localStorage.getItem(STORAGE_KEY_HIDDEN_LOGS);
+      if (savedHidden) {
+        const parsed = JSON.parse(savedHidden);
+        if (Array.isArray(parsed)) setHiddenLogIds(parsed);
+      }
+      const savedReports = localStorage.getItem(STORAGE_KEY_DAILY_REPORTS);
+      if (savedReports) {
+        const parsed = JSON.parse(savedReports);
+        if (Array.isArray(parsed)) setDailyReports(parsed);
+      }
+    } catch {}
+  }, []);
 
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<string>(() => {
     return new Date().toISOString().split("T")[0];

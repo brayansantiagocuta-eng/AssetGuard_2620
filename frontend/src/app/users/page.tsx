@@ -118,19 +118,19 @@ export default function UsersManagementPage() {
   const [createUserMutation] = useMutation<any>(CREATE_USER_MUTATION);
   const [updateUserMutation] = useMutation<any>(UPDATE_USER_MUTATION);
 
-  const [users, setUsers] = useState<UserRecord[]>(() => {
-    if (typeof window === "undefined") return INITIAL_FALLBACK_USERS;
+  const [users, setUsers] = useState<UserRecord[]>(INITIAL_FALLBACK_USERS);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(USERS_CACHE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length >= INITIAL_FALLBACK_USERS.length) {
-          return parsed;
+          setUsers(parsed);
         }
       }
     } catch {}
-    return INITIAL_FALLBACK_USERS;
-  });
+  }, []);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
