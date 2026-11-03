@@ -24,6 +24,10 @@ import {
   FileSpreadsheet,
   History,
   RotateCcw,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 export interface HumanAuditEntry {
@@ -279,6 +283,9 @@ export default function AuditPage() {
   const [selectedHistoryDate, setSelectedHistoryDate] = useState<string>(() => {
     return new Date().toISOString().split("T")[0];
   });
+  const [isHistoryDateOpen, setIsHistoryDateOpen] = useState<boolean>(false);
+  const [isActiveRecordsCollapsed, setIsActiveRecordsCollapsed] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [auditNotice, setAuditNotice] = useState<{ type: "success" | "info"; text: string } | null>(null);
 
   const [manualCronJobs, setManualCronJobs] = useState<HumanCronExecution[]>([]);
@@ -560,6 +567,62 @@ export default function AuditPage() {
     });
   };
 
+  const handleRefreshAudit = async () => {
+    setIsRefreshing(true);
+    try {
+      const items = getLocalAuditEvents();
+      if (items.length > 0) {
+        setLocalAuditEvents(
+          items.map((it) => ({
+            id: it.id || `AUD-${Math.random()}`,
+            userName: it.userName,
+            userRole: it.userRole || "Usuario",
+            actionCode: it.actionCode,
+            actionTitle: it.actionTitle,
+            actionDescription: it.actionDescription,
+            actionCategory: it.actionCategory,
+            entityName: it.entityName,
+            ipAddress: it.ipAddress || "192.168.10.22",
+            createdAt: it.createdAt || new Date().toISOString().replace("T", " ").slice(0, 16),
+          }))
+        );
+      }
+      await Promise.all([
+        refetchLogs ? refetchLogs() : Promise.resolve(),
+        refetchJobs ? refetchJobs() : Promise.resolve(),
+      ]);
+    } catch {}
+    setTimeout(() => {
+      setIsRefreshing(false);
+      setAuditNotice({
+        type: "info",
+        text: "Bitácora e informes sincronizados y actualizados en tiempo real.",
+      });
+    }, 550);
+  };
+
+  const handleHideSingleLog = (logId: string) => {
+    const nextHidden = Array.from(new Set([...hiddenLogIds, logId]));
+    setHiddenLogIds(nextHidden);
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+    } catch {}
+  };
+
+  const handleHideAllVisibleLogs = () => {
+    if (filteredLogs.length === 0) return;
+    const visibleIds = filteredLogs.map((l) => l.id);
+    const nextHidden = Array.from(new Set([...hiddenLogIds, ...visibleIds]));
+    setHiddenLogIds(nextHidden);
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+    } catch {}
+    setAuditNotice({
+      type: "info",
+      text: `Se ocultaron ${visibleIds.length} registro(s) de la vista activa. Puedes restaurarlos pulsando "Ver todos los activos".`,
+    });
+  };
+
   const handleResetVisibility = () => {
     setHiddenLogIds([]);
     try {
@@ -638,14 +701,16 @@ export default function AuditPage() {
         <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
           <button
             type="button"
-            onClick={() => {
-              if (refetchLogs) refetchLogs();
-              if (refetchJobs) refetchJobs();
-            }}
-            title="Actualizar datos"
-            className="p-3 rounded-2xl border border-[#AFC8D0] text-[#172B4D] hover:bg-[#F1F1F2] transition-colors cursor-pointer shrink-0"
+            disabled={isRefreshing}
+            onClick={handleRefreshAudit}
+            title="Refrescar y sincronizar bitácora"
+            className={`p-3 rounded-2xl border transition-all cursor-pointer shrink-0 ${
+              isRefreshing
+                ? "border-[#1995AD] bg-[#1995AD]/15 text-[#1995AD] scale-95 shadow-inner"
+                : "border-[#AFC8D0] text-[#172B4D] hover:bg-[#F1F1F2] hover:border-[#1995AD]"
+            }`}
           >
-            <RefreshCw className="h-5 w-5 text-[#1995AD]" />
+            <RefreshCw className={`h-5 w-5 text-[#1995AD] transition-transform duration-500 ${isRefreshing ? "animate-spin" : ""}`} />
           </button>
 
           {/* Botón Exportar Bitácora con Confirmación */}
@@ -837,7 +902,7 @@ export default function AuditPage() {
 
       {/* Selector de Pestañas Principales: Bitácora vs Robot CRON */}
       <div className="flex items-center justify-between border-b border-[#AFC8D0]/40 pb-2 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveTab("LOGS")}
@@ -863,28 +928,67 @@ export default function AuditPage() {
             <Bot className="h-4 w-4 text-amber-400" />
             <span>Robot de Monitoreo CRON ({cronJobs.length})</span>
           </button>
-        </div>
 
-        {hiddenLogIds.length > 0 && (
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-[#172B4D]/60 font-medium">
-              ({hiddenLogIds.length} archivado/oculto)
-            </span>
+          {activeTab === "LOGS" && (
             <button
               type="button"
-              onClick={handleResetVisibility}
-              className="inline-flex items-center gap-1 text-[#1995AD] font-bold hover:underline cursor-pointer"
+              onClick={() => setIsActiveRecordsCollapsed(!isActiveRecordsCollapsed)}
+              className="px-4 py-2.5 rounded-2xl text-xs font-bold bg-white text-[#172B4D] border border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2] transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              <span>Ver todos los activos</span>
+              {isActiveRecordsCollapsed ? (
+                <>
+                  <Eye className="h-4 w-4 text-[#1995AD]" />
+                  <span>Mostrar registros</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-4 w-4 text-[#1995AD]" />
+                  <span>Ocultar registros</span>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </>
+              )}
             </button>
-          </div>
-        )}
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 text-xs">
+          {activeTab === "LOGS" && filteredLogs.length > 0 && !isActiveRecordsCollapsed && (
+            <button
+              type="button"
+              onClick={handleHideAllVisibleLogs}
+              className="inline-flex items-center gap-1 text-[#172B4D]/75 hover:text-[#172B4D] font-bold bg-[#F1F1F2] hover:bg-[#AFC8D0]/40 px-3 py-1.5 rounded-xl border border-[#AFC8D0]/60 transition-colors cursor-pointer"
+            >
+              <EyeOff className="h-3.5 w-3.5 text-[#1995AD]" />
+              <span>Archivar/Ocultar visibles ({filteredLogs.length})</span>
+            </button>
+          )}
+
+          {hiddenLogIds.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[#172B4D]/60 font-medium">
+                ({hiddenLogIds.length} archivado/oculto)
+              </span>
+              <button
+                type="button"
+                onClick={handleResetVisibility}
+                className="inline-flex items-center gap-1 text-[#1995AD] font-bold hover:underline cursor-pointer"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>Ver todos los activos</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* CONTENIDO 1: BITÁCORA DE MOVIMIENTOS ACTIVOS */}
-      {activeTab === "LOGS" && (
-        <div className="space-y-4">
+      {activeTab === "LOGS" && !isActiveRecordsCollapsed && (
+        <div
+          className={`space-y-4 transition-all duration-300 ${
+            isRefreshing ? "opacity-60 scale-[0.995]" : "opacity-100 scale-100"
+          }`}
+        >
           {/* Barra de Filtros y Buscador */}
           <div className="bg-white p-4 rounded-2xl border border-[#AFC8D0]/60 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
             <div className="relative w-full md:w-96">
@@ -934,12 +1038,13 @@ export default function AuditPage() {
                     <th className="px-5 py-3.5">Acción Realizada</th>
                     <th className="px-5 py-3.5">Detalle / Explicación</th>
                     <th className="px-5 py-3.5">IP de Conexión</th>
+                    <th className="px-4 py-3.5 text-right">Ocultar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F1F1F2]">
                   {filteredLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-[#BCBABE]">
+                      <td colSpan={6} className="py-12 text-center text-[#BCBABE]">
                         <Info className="h-8 w-8 mx-auto mb-2 text-[#AFC8D0]" />
                         <p className="text-sm font-semibold text-[#172B4D]">
                           La cuenta de movimientos activos está en 0 para esta jornada.
@@ -1013,6 +1118,18 @@ export default function AuditPage() {
                           {/* IP de Conexión */}
                           <td className="px-5 py-4 whitespace-nowrap font-mono text-xs text-[#172B4D]/60">
                             {log.ipAddress}
+                          </td>
+
+                          {/* Botón para ocultar registro individual */}
+                          <td className="px-4 py-4 whitespace-nowrap text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleHideSingleLog(log.id)}
+                              title="Ocultar este registro de la vista activa"
+                              className="p-2 rounded-xl text-[#172B4D]/50 hover:text-[#1995AD] hover:bg-[#1995AD]/10 transition-colors cursor-pointer"
+                            >
+                              <EyeOff className="h-4 w-4" />
+                            </button>
                           </td>
                         </tr>
                       );
@@ -1118,7 +1235,10 @@ export default function AuditPage() {
                   id="history-date-picker"
                   type="date"
                   value={selectedHistoryDate}
-                  onChange={(e) => setSelectedHistoryDate(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedHistoryDate(e.target.value);
+                    setIsHistoryDateOpen(true);
+                  }}
                   className="bg-transparent text-sm font-extrabold text-[#172B4D] focus:outline-hidden cursor-pointer"
                 />
               </div>
@@ -1134,19 +1254,26 @@ export default function AuditPage() {
             </div>
           </div>
 
-          {/* Pastillas de acceso rápido a fechas con registros */}
+          {/* Pastillas de acceso rápido a fechas con registros (clic abre, segundo clic en la misma fecha cierra) */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             <span className="text-xs font-bold text-[#172B4D]/60 uppercase shrink-0">
               Jornadas con registro:
             </span>
             {availableHistoryDates.map((dateStr) => {
-              const isSelected = selectedHistoryDate === dateStr;
+              const isSelected = isHistoryDateOpen && selectedHistoryDate === dateStr;
               const hasReport = dailyReports.some((r) => r.date === dateStr);
               return (
                 <button
                   key={dateStr}
                   type="button"
-                  onClick={() => setSelectedHistoryDate(dateStr)}
+                  onClick={() => {
+                    if (isHistoryDateOpen && selectedHistoryDate === dateStr) {
+                      setIsHistoryDateOpen(false);
+                    } else {
+                      setSelectedHistoryDate(dateStr);
+                      setIsHistoryDateOpen(true);
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
                     isSelected
                       ? "bg-[#172B4D] text-white shadow-xs"
@@ -1158,13 +1285,21 @@ export default function AuditPage() {
                   {hasReport && (
                     <span className="h-2 w-2 rounded-full bg-emerald-500" title="Informe consolidado guardado" />
                   )}
+                  {isSelected ? (
+                    <ChevronUp className="h-3.5 w-3.5 text-[#A1D6E2]" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 text-[#172B4D]/50" />
+                  )}
                 </button>
               );
             })}
           </div>
 
-          {/* Tarjeta del Informe Consolidado de la Fecha Seleccionada */}
-          <div className="rounded-2xl bg-gradient-to-br from-[#F1F1F2]/80 via-white to-[#F1F1F2]/50 border border-[#AFC8D0] p-5 sm:p-6 space-y-4">
+          {/* Contenido desplegable de la fecha seleccionada: se muestra al dar clic en una fecha y se cierra al volver a darle clic */}
+          {isHistoryDateOpen && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+              {/* Tarjeta del Informe Consolidado de la Fecha Seleccionada */}
+              <div className="rounded-2xl bg-gradient-to-br from-[#F1F1F2]/80 via-white to-[#F1F1F2]/50 border border-[#AFC8D0] p-5 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#AFC8D0]/30 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-[#1995AD]/15 text-[#1995AD] flex items-center justify-center font-bold">
@@ -1327,6 +1462,8 @@ export default function AuditPage() {
               </div>
             </div>
           </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
