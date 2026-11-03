@@ -106,33 +106,6 @@ export default function HomePage() {
 
     return (
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Cabecera Estándar */}
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-[#AFC8D0]/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="h-12 w-12 rounded-2xl bg-[#1995AD]/15 border border-[#1995AD]/30 flex items-center justify-center text-[#1995AD] shrink-0 shadow-xs">
-              <Layers className="h-7 w-7 stroke-[2.2]" />
-            </div>
-            <div>
-              <h1 className="font-title text-3xl sm:text-4xl text-[#172B4D] tracking-tight">
-                Panel del Técnico
-              </h1>
-              <p className="text-sm text-[#172B4D]/70 mt-0.5">
-                Mis custodias de campo, generación de PIN OTP y solicitud de equipos disponibles
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <Link
-              href="/loans"
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
-            >
-              <Send className="h-4 w-4" />
-              <span>Solicitar Préstamo</span>
-            </Link>
-          </div>
-        </div>
-
         {/* Saludo Personalizado */}
         <div className="rounded-3xl bg-gradient-to-r from-[#1995AD] via-[#188299] to-[#172B4D] text-white p-7 sm:p-8 shadow-md">
           <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
@@ -289,33 +262,6 @@ export default function HomePage() {
   if (role === "INSPECTOR") {
     return (
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Cabecera Estándar */}
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-[#AFC8D0]/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="h-12 w-12 rounded-2xl bg-[#1995AD]/15 border border-[#1995AD]/30 flex items-center justify-center text-[#1995AD] shrink-0 shadow-xs">
-              <ShieldCheck className="h-7 w-7 stroke-[2.2]" />
-            </div>
-            <div>
-              <h1 className="font-title text-3xl sm:text-4xl text-[#172B4D] tracking-tight">
-                Panel del Inspector
-              </h1>
-              <p className="text-sm text-[#172B4D]/70 mt-0.5">
-                Control de calidad, validación de entregas con PIN OTP, inspección física y recepción de equipos
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <Link
-              href="/loans"
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#172B4D] hover:bg-[#1995AD] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
-            >
-              <KeyRound className="h-4 w-4 text-[#A1D6E2]" />
-              <span>Validar PIN en Bodega</span>
-            </Link>
-          </div>
-        </div>
-
         {/* Saludo Personalizado */}
         <div className="rounded-3xl bg-gradient-to-r from-[#172B4D] via-[#145a6b] to-[#1995AD] text-white p-7 sm:p-8 shadow-md">
           <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
@@ -443,23 +389,6 @@ export default function HomePage() {
   // ==========================================
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Cabecera Estándar Unificada */}
-      <div className="bg-white p-6 sm:p-7 rounded-3xl border border-[#AFC8D0]/60 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-[#1995AD]/15 border border-[#1995AD]/30 flex items-center justify-center text-[#1995AD] shrink-0 shadow-xs">
-            <Layers className="h-7 w-7 stroke-[2.2]" />
-          </div>
-          <div>
-            <h1 className="font-title text-3xl sm:text-4xl text-[#172B4D] tracking-tight">
-              Panel Principal
-            </h1>
-            <p className="text-sm text-[#172B4D]/70 mt-0.5">
-              Resumen operativo, indicadores financieros y estado de la flota de telecomunicaciones
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Notificaciones simples de cambio de contraseña para el Administrador */}
       {adminNotices.length > 0 && (
         <div className="space-y-2.5">
