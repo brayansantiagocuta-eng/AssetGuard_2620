@@ -554,6 +554,7 @@ export default function AuditPage() {
     } catch {}
 
     setSelectedHistoryDate(today);
+    setIsHistoryDateOpen(true);
     setAuditNotice({
       type: "success",
       text: `Jornada del día (${today}) cerrada e informe consolidado generado. Los movimientos activos se ocultaron e iniciaron en 0.`,
@@ -772,18 +773,16 @@ export default function AuditPage() {
             <span>Exportar Bitácora (Excel)</span>
           </button>
 
-          {/* Botón Administrador: Cerrar Jornada con Confirmación */}
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setShowConfirmCloseDay(true)}
-              title="Generar resumen de hoy e iniciar cuenta en 0"
-              className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-3 rounded-2xl border border-[#172B4D] bg-[#172B4D] text-white font-bold text-xs sm:text-sm hover:bg-[#172B4D]/90 transition-all cursor-pointer shadow-xs shrink-0"
-            >
-              <History className="h-4 w-4 text-[#A1D6E2]" />
-              <span>Cerrar Jornada (0)</span>
-            </button>
-          )}
+          {/* Botón Cerrar Jornada con Confirmación */}
+          <button
+            type="button"
+            onClick={() => setShowConfirmCloseDay(true)}
+            title="Generar resumen de hoy e iniciar cuenta en 0"
+            className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-3 rounded-2xl border border-[#172B4D] bg-[#172B4D] text-white font-bold text-xs sm:text-sm hover:bg-[#172B4D]/90 transition-all cursor-pointer shadow-xs shrink-0"
+          >
+            <History className="h-4 w-4 text-[#A1D6E2]" />
+            <span>Cerrar Jornada (0)</span>
+          </button>
 
           {isAdmin && (
             <button
@@ -801,14 +800,22 @@ export default function AuditPage() {
 
       {/* Modal de Confirmación: ¿Estás seguro de Exportar Bitácora? */}
       {showConfirmExport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#1995AD]/40 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div
+          onClick={() => setShowConfirmExport(false)}
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#1995AD]/40 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-2xl bg-[#1995AD]/15 text-[#1995AD] flex items-center justify-center shrink-0">
                 <Download className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="font-title text-xl text-[#172B4D]">¿Estás seguro de exportar?</h3>
+                <h3 className="font-title text-xl text-[#172B4D]">
+                  <span className="font-sans font-semibold">¿</span>Estás seguro de exportar?
+                </h3>
                 <p className="text-xs text-[#172B4D]/65">Confirmación de exportación y archivo</p>
               </div>
             </div>
@@ -840,14 +847,22 @@ export default function AuditPage() {
 
       {/* Modal de Confirmación: ¿Estás seguro de Cerrar Jornada? */}
       {showConfirmCloseDay && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#172B4D]/40 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+        <div
+          onClick={() => setShowConfirmCloseDay(false)}
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#172B4D]/40 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
                 <History className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="font-title text-xl text-[#172B4D]">¿Estás seguro de cerrar jornada?</h3>
+                <h3 className="font-title text-xl text-[#172B4D]">
+                  <span className="font-sans font-semibold">¿</span>Estás seguro de cerrar jornada?
+                </h3>
                 <p className="text-xs text-[#172B4D]/65">Cierre diario y reinicio del contador a 0</p>
               </div>
             </div>
@@ -1453,6 +1468,15 @@ export default function AuditPage() {
                   className="bg-transparent text-sm font-extrabold text-[#172B4D] focus:outline-hidden cursor-pointer"
                 />
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowConfirmCloseDay(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#172B4D] text-white font-bold text-xs shadow-xs hover:bg-[#172B4D]/90 transition-all cursor-pointer"
+              >
+                <History className="h-4 w-4 text-[#A1D6E2]" />
+                <span>Cerrar Jornada</span>
+              </button>
 
               <button
                 type="button"

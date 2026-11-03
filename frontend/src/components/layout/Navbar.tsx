@@ -95,6 +95,7 @@ export function Navbar() {
   const router = useRouter();
   const { user, role, logout } = useAuth();
   const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [showConfirmLogout, setShowConfirmLogout] = useState<boolean>(false);
 
   // Estado para la expansión radial de color al dar clic en una sección
   const [spreadEffect, setSpreadEffect] = useState<{
@@ -255,10 +256,10 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* Botón Cerrar Sesión */}
+          {/* Botón Cerrar Sesión con confirmación */}
           <button
             type="button"
-            onClick={handleWaveLogout}
+            onClick={() => setShowConfirmLogout(true)}
             className="group relative flex h-13 w-13 items-center justify-center rounded-2xl text-white/90 hover:text-white hover:bg-red-500/85 transition-all cursor-pointer"
           >
             <LogOut className="h-6 w-6 stroke-[2.2]" />
@@ -276,6 +277,55 @@ export function Navbar() {
           )}
         </div>
       </aside>
+
+      {/* Modal de Confirmación: ¿Estás seguro de Cerrar Sesión? */}
+      {showConfirmLogout && (
+        <div
+          onClick={() => setShowConfirmLogout(false)}
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#172B4D]/60 backdrop-blur-xs p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-[#1995AD]/50 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center shrink-0">
+                <LogOut className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="font-title text-xl text-[#172B4D]">
+                  <span className="font-sans font-semibold">¿</span>Deseas cerrar sesión?
+                </h3>
+                <p className="text-xs text-[#172B4D]/65">
+                  Confirmación de salida de {user.fullName}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-[#172B4D]/80 leading-relaxed">
+              Se finalizará tu sesión activa en el sistema y regresarás a la pantalla de inicio de sesión.
+            </p>
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F1F1F2]">
+              <button
+                type="button"
+                onClick={() => setShowConfirmLogout(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmLogout(false);
+                  void handleWaveLogout();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
+              >
+                Sí, Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
