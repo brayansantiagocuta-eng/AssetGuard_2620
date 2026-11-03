@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  Power,
   X,
 } from "lucide-react";
 
@@ -307,7 +308,7 @@ export default function UsersManagementPage() {
           className="px-5 py-3 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
         >
           <UserPlus className="h-4 w-4" />
-          <span>Nuevo Usuario</span>
+          <span>Registrar</span>
         </button>
       </div>
 
@@ -368,9 +369,14 @@ export default function UsersManagementPage() {
                     <button
                       type="button"
                       onClick={() => handleUpdateUser(u, { status: u.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${u.status === "ACTIVE" ? "bg-red-50 hover:bg-red-100 text-red-700 border border-red-200" : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"}`}
+                      title={u.status === "ACTIVE" ? "Inactivar cuenta" : "Activar cuenta"}
+                      className={`inline-flex items-center justify-center h-8 w-8 rounded-xl transition-all cursor-pointer shadow-xs ${
+                        u.status === "ACTIVE"
+                          ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25"
+                          : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/25"
+                      }`}
                     >
-                      {u.status === "ACTIVE" ? "Inactivar" : "Activar"}
+                      <Power className="h-4 w-4 stroke-[2.5]" />
                     </button>
                   </td>
                 </tr>
@@ -385,7 +391,7 @@ export default function UsersManagementPage() {
         <div onClick={() => setShowModal(false)} className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-900/65 backdrop-blur-xs p-3 sm:p-4 flex items-center justify-center">
           <div onClick={(e) => e.stopPropagation()} className="bg-white w-full max-w-lg rounded-3xl border-2 border-[#1995AD]/50 shadow-2xl max-h-[90vh] flex flex-col overflow-hidden my-auto relative z-10">
             <div className="flex items-center justify-between border-b border-[#F1F1F2] p-5 pb-3 shrink-0">
-              <h2 className="font-title text-2xl text-[#172B4D]">Registrar Nuevo Usuario</h2>
+              <h2 className="font-title text-2xl text-[#172B4D]">Registrar</h2>
               <button type="button" onClick={() => setShowModal(false)} className="p-1.5 rounded-lg text-[#BCBABE] hover:text-[#172B4D] cursor-pointer"><X className="h-5 w-5" /></button>
             </div>
 
@@ -515,7 +521,7 @@ export default function UsersManagementPage() {
 
               <div className="flex items-center justify-end gap-2 p-4 bg-[#F8FAFC] border-t border-[#F1F1F2] shrink-0">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2.5 rounded-xl border border-[#BCBABE] text-sm font-bold text-[#172B4D] cursor-pointer">Cancelar</button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white text-sm font-bold cursor-pointer transition-colors shadow-sm">Guardar Usuario</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white text-sm font-bold cursor-pointer transition-colors shadow-sm">Registrar</button>
               </div>
             </form>
           </div>

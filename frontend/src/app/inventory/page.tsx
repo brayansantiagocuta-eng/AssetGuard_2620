@@ -1355,10 +1355,10 @@ export default function InventoryPage() {
                     ? "bg-[#172B4D] text-[#A1D6E2] ring-2 ring-[#1995AD]"
                     : "bg-[#1995AD] hover:bg-[#172B4D] text-white"
                 }`}
-                title="Abrir o cerrar el formulario desplegable de nuevo equipo"
+                title="Abrir o cerrar el formulario de registro"
               >
                 <Plus className={`h-4 w-4 transition-transform duration-200 ${isNewAssetOpen ? "rotate-45" : ""}`} />
-                <span>Registrar nuevo equipo</span>
+                <span>Registrar</span>
               </button>
             </div>
           )}
@@ -1603,7 +1603,7 @@ export default function InventoryPage() {
                 <Plus className={`h-6 w-6 transition-transform duration-200 ${isNewAssetOpen ? "rotate-45" : ""}`} />
               </div>
               <h3 className="font-title text-lg sm:text-xl tracking-wide text-white">
-                Registrar nuevo equipo
+                Registrar
               </h3>
             </div>
 
@@ -2003,7 +2003,7 @@ export default function InventoryPage() {
                   type="submit"
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#1995AD] to-[#172B4D] hover:from-[#172B4D] hover:to-[#1995AD] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
                 >
-                  Guardar Equipo en Inventario
+                  Registrar
                 </button>
               </div>
             </form>
