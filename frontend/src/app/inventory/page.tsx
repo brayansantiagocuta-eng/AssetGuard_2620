@@ -2581,31 +2581,25 @@ export default function InventoryPage() {
 
             {/* Control de Acceso según Rol y Solicitud */}
             {canDownloadPreviewQr ? (
-              <div className="space-y-3">
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-800 font-semibold flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>Acceso autorizado para inspección y descarga de la etiqueta oficial.</span>
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewQrAsset(null)}
-                    className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
-                  >
-                    Cerrar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      downloadQrTag(previewQrAsset);
-                      setPreviewQrAsset(null);
-                    }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span>Descargar Etiqueta QR Oficial</span>
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">
+                <button
+                  type="button"
+                  onClick={() => setPreviewQrAsset(null)}
+                  className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadQrTag(previewQrAsset);
+                    setPreviewQrAsset(null);
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm shadow-md transition-colors cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Descargar Etiqueta QR Oficial</span>
+                </button>
               </div>
             ) : (
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">

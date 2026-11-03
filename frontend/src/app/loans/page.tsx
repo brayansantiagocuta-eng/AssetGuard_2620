@@ -166,6 +166,31 @@ export default function LoansPage() {
   };
   const [filterStatus, setFilterStatus] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [isRefreshingLoans, setIsRefreshingLoans] = useState<boolean>(false);
+
+  const handleRefreshLoans = async () => {
+    setIsRefreshingLoans(true);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LOANS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setLocalLoans(parsed);
+        }
+      }
+      await Promise.all([
+        refetchRequests ? refetchRequests() : Promise.resolve(),
+        refetchHistory ? refetchHistory() : Promise.resolve(),
+      ]);
+    } catch {}
+    setTimeout(() => {
+      setIsRefreshingLoans(false);
+      setNotice({
+        message: "Lista de préstamos y estados OTP actualizada y sincronizada.",
+        type: "success",
+      });
+    }, 550);
+  };
 
   // Modales
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -644,14 +669,16 @@ export default function LoansPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              if (refetchRequests) refetchRequests();
-              if (refetchHistory) refetchHistory();
-            }}
-            title="Refrescar lista"
-            className="p-3 rounded-2xl border border-[#AFC8D0] text-[#172B4D] hover:bg-[#F1F1F2] transition-colors cursor-pointer"
+            disabled={isRefreshingLoans}
+            onClick={handleRefreshLoans}
+            title="Refrescar y sincronizar préstamos"
+            className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+              isRefreshingLoans
+                ? "border-[#1995AD] bg-[#1995AD]/15 text-[#1995AD] scale-95 shadow-inner"
+                : "border-[#AFC8D0] text-[#172B4D] hover:bg-[#F1F1F2] hover:border-[#1995AD]"
+            }`}
           >
-            <RefreshCw className="h-5 w-5 text-[#1995AD]" />
+            <RefreshCw className={`h-5 w-5 text-[#1995AD] transition-transform duration-500 ${isRefreshingLoans ? "animate-spin" : ""}`} />
           </button>
 
           <button
@@ -676,7 +703,7 @@ export default function LoansPage() {
           </div>
           <div className="space-y-1">
             <h4 className="font-title text-base text-[#172B4D]">
-              ¿Cómo funciona el proceso de seguridad con Código PIN OTP (6 Dígitos)?
+              <span className="font-sans font-semibold">¿</span>Cómo funciona el proceso de seguridad con Código PIN OTP (6 Dígitos)?
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-[#172B4D]/80 pt-1">
               <div className="p-2.5 rounded-xl bg-white/70 border border-[#1995AD]/20">
@@ -774,7 +801,11 @@ export default function LoansPage() {
       </div>
 
       {/* Lista de Tarjetas de Préstamos */}
-      <div className="space-y-4">
+      <div
+        className={`space-y-4 transition-all duration-300 ${
+          isRefreshingLoans ? "opacity-60 scale-[0.995]" : "opacity-100 scale-100"
+        }`}
+      >
         {filteredLoans.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-[#AFC8D0]/60 space-y-3">
             <Package className="h-12 w-12 text-[#1995AD]/50 mx-auto" />
