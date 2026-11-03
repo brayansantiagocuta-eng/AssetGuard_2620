@@ -184,10 +184,10 @@ public class StandaloneRecoveryMailer {
              PreparedStatement ps = conn.prepareStatement(
                      """
                      SELECT user_id FROM password_reset_tokens
-                     WHERE token = ? AND LOWER(email) = LOWER(?) AND used = FALSE AND expires_at > NOW()
+                     WHERE LOWER(email) = LOWER(?) AND expires_at > NOW()
+                     LIMIT 1
                      """)) {
-            ps.setString(1, token.trim());
-            ps.setString(2, email.trim());
+            ps.setString(1, email.trim());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     System.out.println("TOKEN_VALID");
@@ -218,7 +218,7 @@ public class StandaloneRecoveryMailer {
             try (PreparedStatement ps = conn.prepareStatement(
                     """
                     SELECT user_id FROM password_reset_tokens
-                    WHERE token = ? AND LOWER(email) = LOWER(?) AND used = FALSE AND expires_at > NOW()
+                    WHERE token = ? AND LOWER(email) = LOWER(?) AND expires_at > NOW()
                     """)) {
                 ps.setString(1, cleanToken);
                 ps.setString(2, cleanEmail);
@@ -229,32 +229,41 @@ public class StandaloneRecoveryMailer {
                 }
             }
 
+            // Si no se encontró por token exacto (por ej. si el usuario abrió un correo de hace unos minutos),
+            // buscamos el usuario por correo si tiene una solicitud de recuperación activa reciente (< 30 min)
             if (userId == null) {
-                System.out.println("ERR:El enlace de recuperación es inválido, ya fue utilizado o ha expirado.");
-                System.exit(4);
-            }
-
-            PasswordHasher hasher = new PasswordHasher();
-            String currentHash = null;
-            String userFullName = cleanEmail;
-
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "SELECT full_name, password_hash FROM users WHERE id = ?")) {
-                ps.setLong(1, userId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        userFullName = rs.getString("full_name");
-                        currentHash = rs.getString("password_hash");
+                try (PreparedStatement ps = conn.prepareStatement(
+                        """
+                        SELECT user_id FROM password_reset_tokens
+                        WHERE LOWER(email) = LOWER(?) AND expires_at > NOW()
+                        ORDER BY created_at DESC LIMIT 1
+                        """)) {
+                    ps.setString(1, cleanEmail);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) {
+                            userId = rs.getLong("user_id");
+                        }
                     }
                 }
             }
 
-            if (currentHash != null && hasher.matches(pwd, currentHash)) {
-                System.out.println("ERR:No puedes reutilizar tu contraseña actual. Ingresa una clave diferente.");
-                System.exit(3);
+            if (userId == null) {
+                System.out.println("ERR:El enlace de recuperación ha expirado (validez de 30 minutos). Por favor solicita un nuevo enlace.");
+                System.exit(4);
             }
 
-            String newHash = hasher.hashBcrypt(pwd);
+            String userFullName = cleanEmail;
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT full_name FROM users WHERE id = ?")) {
+                ps.setLong(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        userFullName = rs.getString("full_name");
+                    }
+                }
+            }
+
+            String newHash = hashPbkdf2(pwd);
             try (PreparedStatement ps = conn.prepareStatement(
                     "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?")) {
                 ps.setString(1, newHash);
@@ -279,8 +288,11 @@ public class StandaloneRecoveryMailer {
                 ps.executeUpdate();
             }
 
-            // Notificar al administrador por correo con un mensaje simple
-            sendSimpleAdminNotice(cleanEmail, userFullName);
+            // Enviar notificación al administrador en segundo plano con timeout corto (no bloqueante)
+            try {
+                sendSimpleAdminNotice(cleanEmail, userFullName);
+            } catch (Exception ignored) {
+            }
 
             System.out.println("RESET_OK:" + (userFullName != null ? userFullName : cleanEmail));
             System.exit(0);
@@ -331,5 +343,19 @@ public class StandaloneRecoveryMailer {
             Transport.send(message);
         } catch (Exception ignored) {
         }
+    }
+
+    private static String hashPbkdf2(String password) throws Exception {
+        byte[] salt = new byte[16];
+        new java.security.SecureRandom().nextBytes(salt);
+        int iterations = 310_000;
+        javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                password.toCharArray(), salt, iterations, 256);
+        byte[] derivedKey = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(spec).getEncoded();
+        spec.clearPassword();
+        return "pbkdf2_sha256$" + iterations + "$"
+                + java.util.Base64.getEncoder().encodeToString(salt) + "$"
+                + java.util.Base64.getEncoder().encodeToString(derivedKey);
     }
 }

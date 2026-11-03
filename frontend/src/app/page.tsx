@@ -143,13 +143,6 @@ export default function HomePage() {
               {roleLabel} — Tienes equipos activos bajo tu responsabilidad técnica.
             </p>
           </div>
-          <Link
-            href="/scanner"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/25 transition-all self-start md:self-auto"
-          >
-            <QrCode className="h-4 w-4" />
-            <span>Escanear Etiqueta QR</span>
-          </Link>
         </div>
 
         {/* 4 KPIs de Alto Valor para el Técnico */}
@@ -239,7 +232,7 @@ export default function HomePage() {
                   </span>
                 </div>
                 <Link
-                  href="/scanner"
+                  href="/inventory"
                   className="px-3.5 py-2 rounded-xl bg-[#172B4D] hover:bg-[#1995AD] text-white font-bold text-xs shadow-xs transition-colors self-start sm:self-auto"
                 >
                   Ver Ficha Técnica

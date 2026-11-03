@@ -1381,7 +1381,8 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* Desplegable limpio de Gráfica e Informe por Categoría (amplio y con mejor jerarquía) */}
+        {/* Desplegable limpio de Gráfica e Informe por Categoría (Exclusivo para Administradores e Inspectores) */}
+        {role !== "TECHNICIAN" && (
         <div className="bg-white rounded-3xl border-2 border-[#AFC8D0]/70 shadow-sm overflow-hidden">
           <button
             type="button"
@@ -1588,6 +1589,7 @@ export default function InventoryPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Desplegable de Nuevo Equipo (Totalmente Funcional, Visible e Integrado en Página) */}
