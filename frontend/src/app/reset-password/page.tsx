@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowRight, ShieldAlert } from "lucide-react";
+import { recordAuditEvent } from "@/lib/auditLogger";
 
 const ALLOWED_PASSWORD_REGEX = /^[a-zA-Z0-9$!#%&]*$/;
 
@@ -138,8 +139,35 @@ function ResetPasswordContent() {
         throw new Error(data.message || data.error || "No se pudo actualizar la contraseña.");
       }
 
+      const displayName = data.userName || emailTrimmed;
+
+      // Registrar en la bitácora y enviar notificación simple al Administrador
+      recordAuditEvent({
+        userName: displayName,
+        userRole: "Usuario",
+        actionCode: "PASSWORD_RESET_COMPLETED",
+        actionTitle: "Cambio de Contraseña",
+        actionDescription: `El usuario ${displayName} (${emailTrimmed}) cambió su contraseña exitosamente.`,
+        actionCategory: "USER",
+        entityName: emailTrimmed,
+      });
+
+      try {
+        const rawNotices = localStorage.getItem("assetguard_admin_notifications");
+        const existingNotices = rawNotices ? JSON.parse(rawNotices) : [];
+        const newNotice = {
+          id: `PWD-CHG-${Date.now()}`,
+          message: `El usuario ${displayName} (${emailTrimmed}) ha cambiado su contraseña.`,
+          createdAt: new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" }),
+        };
+        localStorage.setItem(
+          "assetguard_admin_notifications",
+          JSON.stringify([newNotice, ...existingNotices].slice(0, 10))
+        );
+      } catch {}
+
       setSuccessMsg(
-        "¡Contraseña actualizada con éxito! Redirigiendo al inicio de sesión..."
+        "¡Contraseña actualizada con éxito! Se ha notificado al administrador. Redirigiendo al inicio de sesión..."
       );
 
       setTimeout(() => {

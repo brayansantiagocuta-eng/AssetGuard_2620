@@ -25,14 +25,28 @@ public class StandaloneRecoveryMailer {
     public static void main(String[] args) {
         System.setProperty("java.net.preferIPv4Stack", "true");
         if (args.length < 1 || args[0] == null || args[0].isBlank()) {
-            System.err.println("MISSING_EMAIL");
+            System.err.println("MISSING_ARGS");
             System.exit(1);
         }
 
-        String email = args[0].trim().toLowerCase(Locale.ROOT);
         String dbUrl = "jdbc:postgresql://localhost:5432/AssetGuard_2620";
         String dbUser = "postgres";
         String dbPass = "123";
+
+        // Modo 1: VERIFY <token> <email>
+        if ("VERIFY".equalsIgnoreCase(args[0]) && args.length >= 3) {
+            handleVerify(dbUrl, dbUser, dbPass, args[1], args[2]);
+            return;
+        }
+
+        // Modo 2: RESET <token> <email> <newPassword>
+        if ("RESET".equalsIgnoreCase(args[0]) && args.length >= 4) {
+            handleReset(dbUrl, dbUser, dbPass, args[1], args[2], args[3]);
+            return;
+        }
+
+        // Modo 3 (por defecto): enviar correo de recuperación al <email>
+        String email = args[0].trim().toLowerCase(Locale.ROOT);
 
         try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPass)) {
             Long userId = null;
@@ -183,9 +197,6 @@ public class StandaloneRecoveryMailer {
                     <strong>Importante:</strong> Este enlace es de <strong>un solo uso</strong> y expirará automáticamente en <strong>30 minutos</strong> por motivos de seguridad institucional.
                   </div>
 
-                  <p style="font-size: 12px; color: #64748B;">Si el botón no funciona, copia y pega este enlace directamente en tu navegador:</p>
-                  <div class="url-box">%s</div>
-
                   <p style="margin-top: 25px; font-size: 12px; color: #64748B;">
                     Si no solicitaste este cambio, puedes ignorar este correo de forma segura. Tu contraseña actual permanecerá intacta.
                   </p>
@@ -196,6 +207,160 @@ public class StandaloneRecoveryMailer {
               </div>
             </body>
             </html>
-            """.formatted(userName, resetUrl, resetUrl);
+            """.formatted(userName, resetUrl);
+    }
+
+    private static void handleVerify(String dbUrl, String dbUser, String dbPass, String token, String email) {
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPass);
+             PreparedStatement ps = conn.prepareStatement(
+                     """
+                     SELECT user_id FROM password_reset_tokens
+                     WHERE token = ? AND LOWER(email) = LOWER(?) AND used = FALSE AND expires_at > NOW()
+                     """)) {
+            ps.setString(1, token.trim());
+            ps.setString(2, email.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    System.out.println("TOKEN_VALID");
+                    System.exit(0);
+                } else {
+                    System.out.println("TOKEN_INVALID");
+                    System.exit(2);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(5);
+        }
+    }
+
+    private static void handleReset(String dbUrl, String dbUser, String dbPass, String token, String email, String newPassword) {
+        String cleanEmail = email.trim().toLowerCase(Locale.ROOT);
+        String cleanToken = token.trim();
+        String pwd = newPassword.trim();
+
+        if (pwd.length() < 6 || pwd.length() > 20) {
+            System.out.println("ERR:La contraseña debe tener entre 6 y 20 caracteres.");
+            System.exit(3);
+        }
+
+        try (Connection conn = DriverManager.getConnection(dbUrl, dbUser, dbPass)) {
+            Long userId = null;
+            try (PreparedStatement ps = conn.prepareStatement(
+                    """
+                    SELECT user_id FROM password_reset_tokens
+                    WHERE token = ? AND LOWER(email) = LOWER(?) AND used = FALSE AND expires_at > NOW()
+                    """)) {
+                ps.setString(1, cleanToken);
+                ps.setString(2, cleanEmail);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        userId = rs.getLong("user_id");
+                    }
+                }
+            }
+
+            if (userId == null) {
+                System.out.println("ERR:El enlace de recuperación es inválido, ya fue utilizado o ha expirado.");
+                System.exit(4);
+            }
+
+            PasswordHasher hasher = new PasswordHasher();
+            String currentHash = null;
+            String userFullName = cleanEmail;
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT full_name, password_hash FROM users WHERE id = ?")) {
+                ps.setLong(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        userFullName = rs.getString("full_name");
+                        currentHash = rs.getString("password_hash");
+                    }
+                }
+            }
+
+            if (currentHash != null && hasher.matches(pwd, currentHash)) {
+                System.out.println("ERR:No puedes reutilizar tu contraseña actual. Ingresa una clave diferente.");
+                System.exit(3);
+            }
+
+            String newHash = hasher.hashBcrypt(pwd);
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?")) {
+                ps.setString(1, newHash);
+                ps.setLong(2, userId);
+                ps.executeUpdate();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE password_reset_tokens SET used = TRUE WHERE token = ?")) {
+                ps.setString(1, cleanToken);
+                ps.executeUpdate();
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    """
+                    INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
+                    VALUES (?, 'PASSWORD_RESET_COMPLETED', 'users', ?, NULL, ?, '127.0.0.1')
+                    """)) {
+                ps.setLong(1, userId);
+                ps.setLong(2, userId);
+                ps.setString(3, "{\"email\":\"" + cleanEmail.replace("\"", "") + "\",\"userName\":\"" + (userFullName != null ? userFullName.replace("\"", "") : "") + "\",\"status\":\"SUCCESS\"}");
+                ps.executeUpdate();
+            }
+
+            // Notificar al administrador por correo con un mensaje simple
+            sendSimpleAdminNotice(cleanEmail, userFullName);
+
+            System.out.println("RESET_OK:" + (userFullName != null ? userFullName : cleanEmail));
+            System.exit(0);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(5);
+        }
+    }
+
+    private static void sendSimpleAdminNotice(String changedEmail, String changedName) {
+        try {
+            String smtpUser = "brayansantiagocuta@gmail.com";
+            String smtpPass = "guldooxtbzmkiweb";
+            String adminEmail = "valesotelo.0806@gmail.com";
+
+            Properties props = new Properties();
+            props.put("mail.smtp.host", "smtp.gmail.com");
+            props.put("mail.smtp.port", "587");
+            props.put("mail.smtp.auth", "true");
+            props.put("mail.smtp.starttls.enable", "true");
+            props.put("mail.smtp.starttls.required", "true");
+            props.put("mail.smtp.connectiontimeout", "8000");
+            props.put("mail.smtp.timeout", "8000");
+
+            Session session = Session.getInstance(props, new Authenticator() {
+                @Override
+                protected PasswordAuthentication getPasswordAuthentication() {
+                    return new PasswordAuthentication(smtpUser, smtpPass);
+                }
+            });
+
+            String display = (changedName != null && !changedName.isBlank()) ? changedName : changedEmail;
+            MimeMessage message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(smtpUser, "AssetGuard 2620 - Seguridad", "UTF-8"));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(adminEmail));
+            message.setSubject("Notificación: Cambio de contraseña en AssetGuard 2620", "UTF-8");
+            String html = """
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #172B4D; background-color: #F1F1F2;">
+                  <div style="max-width: 520px; margin: 0 auto; background: #FFFFFF; border-radius: 16px; padding: 24px; border: 1px solid #AFC8D0;">
+                    <h3 style="margin-top: 0; color: #172B4D;">Aviso de Seguridad — AssetGuard 2620</h3>
+                    <p style="font-size: 14px; line-height: 1.5;">
+                      Se informa al Administrador que el usuario <strong>%s</strong> (%s) ha cambiado su contraseña exitosamente en el sistema.
+                    </p>
+                  </div>
+                </div>
+                """.formatted(display, changedEmail);
+            message.setContent(html, "text/html; charset=UTF-8");
+            Transport.send(message);
+        } catch (Exception ignored) {
+        }
     }
 }

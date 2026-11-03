@@ -99,9 +99,6 @@ public class EmailService {
                     <strong>Importante:</strong> Este enlace es de <strong>un solo uso</strong> y expirará automáticamente en <strong>30 minutos</strong> por motivos de seguridad institucional.
                   </div>
 
-                  <p style="font-size: 12px; color: #64748B;">Si el botón no funciona, copia y pega este enlace directamente en tu navegador:</p>
-                  <div class="url-box">%s</div>
-
                   <p style="margin-top: 25px; font-size: 12px; color: #64748B;">
                     Si no solicitaste este cambio, puedes ignorar este correo de forma segura. Tu contraseña actual permanecerá intacta.
                   </p>
@@ -112,6 +109,37 @@ public class EmailService {
               </div>
             </body>
             </html>
-            """.formatted(userName, resetUrl, resetUrl);
+            """.formatted(userName, resetUrl);
+    }
+
+    /**
+     * Envía una notificación simple al Administrador cuando un usuario cambia su contraseña.
+     */
+    public void sendAdminPasswordChangedNotification(String adminEmail, String changedUserEmail, String changedUserName) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail, "AssetGuard 2620 - Seguridad");
+            helper.setTo(adminEmail);
+            helper.setSubject("Notificación: Cambio de contraseña en AssetGuard 2620");
+
+            String nameDisplay = (changedUserName != null && !changedUserName.isBlank()) ? changedUserName : changedUserEmail;
+            String html = """
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: #172B4D; background-color: #F1F1F2;">
+                  <div style="max-width: 520px; margin: 0 auto; background: #FFFFFF; border-radius: 16px; padding: 24px; border: 1px solid #AFC8D0;">
+                    <h3 style="margin-top: 0; color: #172B4D;">Aviso de Seguridad — AssetGuard 2620</h3>
+                    <p style="font-size: 14px; line-height: 1.5;">
+                      Se informa al Administrador que el usuario <strong>%s</strong> (<code>%s</code>) ha cambiado su contraseña exitosamente en el sistema.
+                    </p>
+                  </div>
+                </div>
+                """.formatted(nameDisplay, changedUserEmail);
+
+            helper.setText(html, true);
+            mailSender.send(message);
+        } catch (Exception ex) {
+            log.warn("No se pudo enviar notificación de cambio de clave al admin: {}", ex.getMessage());
+        }
     }
 }

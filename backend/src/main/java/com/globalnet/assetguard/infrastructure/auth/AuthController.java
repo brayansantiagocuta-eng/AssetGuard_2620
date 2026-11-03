@@ -217,7 +217,8 @@ public class AuthController {
         loginRateLimiter.reset(loginRateLimiter.key(email, "127.0.0.1"));
         loginRateLimiter.reset(loginRateLimiter.key(email, "0:0:0:0:0:0:0:1"));
 
-        // 6. Auditoría
+        // 6. Auditoría y Notificación al Administrador
+        String userName = userRepository.findById(userId).map(AuthenticatedUser::fullName).orElse(email);
         jdbcTemplate.update(
                 """
                 INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
@@ -225,10 +226,12 @@ public class AuthController {
                 """,
                 userId,
                 userId,
-                "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"SUCCESS\"}",
+                "{\"email\":\"" + email.replace("\"", "") + "\",\"userName\":\"" + userName.replace("\"", "") + "\",\"status\":\"SUCCESS\"}",
                 clientIp(httpRequest));
 
-        return new MessageResponse("Contraseña actualizada exitosamente en el sistema. Ya puedes iniciar sesión con tu nueva contraseña.");
+        emailService.sendAdminPasswordChangedNotification("valesotelo.0806@gmail.com", email, userName);
+
+        return new MessageResponse("Contraseña actualizada exitosamente en el sistema. El administrador ha sido notificado.");
     }
 
     public record PublicResetPasswordRequest(String email, String token, String newPassword) {

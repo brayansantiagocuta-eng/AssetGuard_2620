@@ -38,6 +38,7 @@ export default function HomePage() {
   } | null>(null);
 
   const [localLoans, setLocalLoans] = useState<any[]>([]);
+  const [adminNotices, setAdminNotices] = useState<Array<{ id: string; message: string; createdAt: string }>>([]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -48,8 +49,24 @@ export default function HomePage() {
           if (Array.isArray(parsed)) setLocalLoans(parsed);
         }
       } catch {}
+
+      try {
+        const savedNotices = localStorage.getItem("assetguard_admin_notifications");
+        if (savedNotices) {
+          const parsed = JSON.parse(savedNotices);
+          if (Array.isArray(parsed)) setAdminNotices(parsed);
+        }
+      } catch {}
     }
   }, []);
+
+  const dismissAdminNotice = (id: string) => {
+    const updated = adminNotices.filter((n) => n.id !== id);
+    setAdminNotices(updated);
+    try {
+      localStorage.setItem("assetguard_admin_notifications", JSON.stringify(updated));
+    } catch {}
+  };
 
   const summary = data?.financialSummary;
   const totalAssets = summary?.totalAssetsCount ?? 48;
@@ -466,6 +483,33 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Notificaciones simples de cambio de contraseña para el Administrador */}
+      {adminNotices.length > 0 && (
+        <div className="space-y-2.5">
+          {adminNotices.map((notice) => (
+            <div
+              key={notice.id}
+              className="bg-amber-50 border border-amber-300 rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 shadow-xs"
+            >
+              <div className="flex items-center gap-3 text-sm text-[#172B4D]">
+                <KeyRound className="h-5 w-5 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Notificación:</strong> {notice.message}{" "}
+                  <span className="text-xs text-[#172B4D]/60">({notice.createdAt})</span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => dismissAdminNotice(notice.id)}
+                className="text-xs font-bold text-[#172B4D]/70 hover:text-[#172B4D] px-2.5 py-1 rounded-lg hover:bg-amber-200/50 transition-colors cursor-pointer"
+              >
+                Entendido
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Saludo institucional con rol */}
       <div className="rounded-3xl bg-gradient-to-r from-[#1995AD] via-[#188299] to-[#172B4D] text-white p-7 sm:p-8 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">

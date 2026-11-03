@@ -147,8 +147,8 @@ export function Navbar() {
     }, 1150);
   };
 
-  // No renderizar la barra lateral en la pantalla de login ni sin sesión
-  if (pathname === "/login" || !user) {
+  // No renderizar la barra lateral en la pantalla de login, restablecer contraseña ni sin sesión
+  if (pathname === "/login" || pathname.startsWith("/reset-password") || !user) {
     return null;
   }
 

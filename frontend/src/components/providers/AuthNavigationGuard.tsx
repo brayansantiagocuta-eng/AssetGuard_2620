@@ -59,16 +59,18 @@ export function AuthNavigationGuard({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const isPublicRoute = pathname === "/login" || pathname.startsWith("/reset-password");
+
   useEffect(() => {
     if (isLoading || wavePhase !== "idle") {
       return;
     }
-    if (pathname !== "/login" && !user) {
+    if (!isPublicRoute && !user) {
       router.replace("/login");
       return;
     }
     // Validación de permisos por Rol
-    if (user && role && pathname !== "/login") {
+    if (user && role && !isPublicRoute) {
       const matchedPrefix = Object.keys(ROLE_ALLOWED_ROUTES)
         .filter((route) => route !== "/")
         .find((route) => pathname === route || pathname.startsWith(`${route}/`));
@@ -80,10 +82,14 @@ export function AuthNavigationGuard({ children }: { children: ReactNode }) {
         }
       }
     }
-  }, [isLoading, pathname, role, router, user, wavePhase]);
+  }, [isLoading, isPublicRoute, pathname, role, router, user, wavePhase]);
 
   useEffect(() => {
     const validateRestoredPage = () => {
+      if (isPublicRoute) {
+        setIsCheckingHistory(false);
+        return;
+      }
       setIsCheckingHistory(true);
       void refreshSession().then((isAuthenticated) => {
         if (!isAuthenticated) {
@@ -101,7 +107,7 @@ export function AuthNavigationGuard({ children }: { children: ReactNode }) {
       window.removeEventListener("pageshow", validateRestoredPage);
       window.removeEventListener("popstate", validateRestoredPage);
     };
-  }, [refreshSession, router]);
+  }, [isPublicRoute, refreshSession, router]);
 
   const isWaveCovered = wavePhase === "in" || wavePhase === "hold";
 
@@ -219,7 +225,7 @@ export function AuthNavigationGuard({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      {isLoading || isCheckingHistory || (pathname !== "/login" && !user && wavePhase === "idle") ? (
+      {isLoading || isCheckingHistory || (!isPublicRoute && !user && wavePhase === "idle") ? (
         <div
           className="flex min-h-screen items-center justify-center text-sm text-slate-600"
           role="status"
