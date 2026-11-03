@@ -68,7 +68,8 @@ export interface DailySummaryReport {
 }
 
 const STORAGE_KEY_DAILY_REPORTS = "assetguard_audit_daily_reports";
-const STORAGE_KEY_HIDDEN_LOGS = "assetguard_audit_hidden_logs";
+const STORAGE_KEY_HIDDEN_LOGS = "assetguard_audit_hidden_logs_v3";
+const TODAY_PREFIX = new Date().toISOString().split("T")[0];
 
 const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
   {
@@ -81,7 +82,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "LOAN",
     entityName: "Préstamos",
     ipAddress: "192.168.10.45",
-    createdAt: "2026-10-26 09:15",
+    createdAt: `${TODAY_PREFIX} 08:15`,
   },
   {
     id: "AUD-102",
@@ -93,7 +94,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "LOAN",
     entityName: "Préstamos",
     ipAddress: "192.168.10.10",
-    createdAt: "2026-10-26 09:20",
+    createdAt: `${TODAY_PREFIX} 08:20`,
   },
   {
     id: "AUD-103",
@@ -105,7 +106,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "OTP",
     entityName: "Custodia Física",
     ipAddress: "192.168.10.12",
-    createdAt: "2026-10-26 09:30",
+    createdAt: `${TODAY_PREFIX} 08:30`,
   },
   {
     id: "AUD-104",
@@ -117,7 +118,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "CRON",
     entityName: "Monitoreo",
     ipAddress: "127.0.0.1 (Servidor)",
-    createdAt: "2026-10-26 00:00",
+    createdAt: `${TODAY_PREFIX} 00:00`,
   },
   {
     id: "AUD-105",
@@ -129,7 +130,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "RETURN",
     entityName: "Inventario",
     ipAddress: "192.168.10.12",
-    createdAt: "2026-10-25 16:45",
+    createdAt: `${TODAY_PREFIX} 08:45`,
   },
 ];
 
@@ -285,6 +286,9 @@ export default function AuditPage() {
   });
   const [isHistoryDateOpen, setIsHistoryDateOpen] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+  const [selectedHiddenIds, setSelectedHiddenIds] = useState<string[]>([]);
+  const [isHiddenPanelOpen, setIsHiddenPanelOpen] = useState<boolean>(false);
   const [auditNotice, setAuditNotice] = useState<{ type: "success" | "info"; text: string } | null>(null);
 
   const [manualCronJobs, setManualCronJobs] = useState<HumanCronExecution[]>([]);
@@ -356,7 +360,7 @@ export default function AuditPage() {
 
   const [runCronMutation] = useMutation(RUN_DAILY_OVERDUE_JOB_MUTATION);
 
-  // Mapear logs de GraphQL + eventos locales a lenguaje 100% entendible
+  // Mapear logs de GraphQL + eventos locales + registros iniciales del día a lenguaje 100% entendible
   const logs = useMemo<HumanAuditEntry[]>(() => {
     const list: HumanAuditEntry[] = [...localAuditEvents];
     if (logsData?.auditLogs?.items && logsData.auditLogs.items.length > 0) {
@@ -377,9 +381,7 @@ export default function AuditPage() {
       });
       list.push(...mapped);
     }
-    if (list.length === 0) {
-      return INITIAL_FALLBACK_LOGS;
-    }
+    list.push(...INITIAL_FALLBACK_LOGS);
     const seen = new Set<string>();
     return list.filter((item) => {
       if (seen.has(item.id)) return false;
@@ -447,22 +449,10 @@ export default function AuditPage() {
         localStorage.setItem(STORAGE_KEY_DAILY_REPORTS, JSON.stringify(updatedReports));
         setDailyReports(updatedReports);
       }
-
-      // Solo ocultar automáticamente los días pasados en la primera carga (si no se han restaurado manualmente)
-      const wasRestoredManually = sessionStorage.getItem("assetguard_audit_restored_all") === "true";
-      if (!wasRestoredManually) {
-        const pastLogIds = pastLogs.map((l) => l.id);
-        const unhiddenPastIds = pastLogIds.filter((id) => !hiddenLogIds.includes(id));
-        if (unhiddenPastIds.length > 0) {
-          const nextHidden = Array.from(new Set([...hiddenLogIds, ...pastLogIds]));
-          localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
-          setHiddenLogIds(nextHidden);
-        }
-      }
     } catch {
       // ignore
     }
-  }, [logs, hiddenLogIds]);
+  }, [logs]);
 
   // Ejecución manual del robot CRON
   const handleTriggerCron = async () => {
@@ -600,24 +590,96 @@ export default function AuditPage() {
     }, 550);
   };
 
-  const handleToggleVisibility = () => {
-    if (filteredLogs.length > 0) {
-      // Ocultar todos los movimientos actualmente visibles
-      const visibleIds = filteredLogs.map((l) => l.id);
-      const nextHidden = Array.from(new Set([...hiddenLogIds, ...visibleIds]));
-      setHiddenLogIds(nextHidden);
-      try {
-        sessionStorage.removeItem("assetguard_audit_restored_all");
-        localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
-      } catch {}
+  // Lista de registros actualmente ocultos
+  const hiddenLogsList = useMemo(() => {
+    return logs.filter((item) => hiddenLogIds.includes(item.id));
+  }, [logs, hiddenLogIds]);
+
+  const allActiveSelected =
+    filteredLogs.length > 0 && filteredLogs.every((l) => selectedLogIds.includes(l.id));
+
+  const allHiddenSelected =
+    hiddenLogsList.length > 0 && hiddenLogsList.every((l) => selectedHiddenIds.includes(l.id));
+
+  const handleToggleSelectActive = (id: string) => {
+    setSelectedLogIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllActive = () => {
+    if (allActiveSelected) {
+      setSelectedLogIds([]);
     } else {
-      // Mostrar todos los movimientos ocultos
-      setHiddenLogIds([]);
-      try {
-        sessionStorage.setItem("assetguard_audit_restored_all", "true");
-        localStorage.removeItem(STORAGE_KEY_HIDDEN_LOGS);
-      } catch {}
+      setSelectedLogIds(filteredLogs.map((l) => l.id));
     }
+  };
+
+  const handleHideSelected = () => {
+    if (selectedLogIds.length === 0) return;
+    const nextHidden = Array.from(new Set([...hiddenLogIds, ...selectedLogIds]));
+    setHiddenLogIds(nextHidden);
+    setSelectedLogIds([]);
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+    } catch {}
+  };
+
+  const handleHideSingle = (id: string) => {
+    const nextHidden = Array.from(new Set([...hiddenLogIds, id]));
+    setHiddenLogIds(nextHidden);
+    setSelectedLogIds((prev) => prev.filter((item) => item !== id));
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+    } catch {}
+  };
+
+  const handleToggleSelectHidden = (id: string) => {
+    setSelectedHiddenIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllHidden = () => {
+    if (allHiddenSelected) {
+      setSelectedHiddenIds([]);
+    } else {
+      setSelectedHiddenIds(hiddenLogsList.map((l) => l.id));
+    }
+  };
+
+  const handleRestoreSelectedHidden = () => {
+    if (selectedHiddenIds.length === 0) return;
+    const nextHidden = hiddenLogIds.filter((id) => !selectedHiddenIds.includes(id));
+    setHiddenLogIds(nextHidden);
+    setSelectedHiddenIds([]);
+    if (nextHidden.length === 0) {
+      setIsHiddenPanelOpen(false);
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+    } catch {}
+  };
+
+  const handleRestoreSingleHidden = (id: string) => {
+    const nextHidden = hiddenLogIds.filter((item) => item !== id);
+    setHiddenLogIds(nextHidden);
+    setSelectedHiddenIds((prev) => prev.filter((item) => item !== id));
+    if (nextHidden.length === 0) {
+      setIsHiddenPanelOpen(false);
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
+    } catch {}
+  };
+
+  const handleRestoreAllHidden = () => {
+    setHiddenLogIds([]);
+    setSelectedHiddenIds([]);
+    setIsHiddenPanelOpen(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY_HIDDEN_LOGS);
+    } catch {}
   };
 
   // Requisito 3: Registros diarios filtrados por fecha al final de la página
@@ -917,25 +979,190 @@ export default function AuditPage() {
         </div>
 
         {activeTab === "LOGS" && (
-          <button
-            type="button"
-            onClick={handleToggleVisibility}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-bold bg-white text-[#172B4D] border border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2] transition-all cursor-pointer shadow-2xs"
-          >
-            {filteredLogs.length > 0 ? (
-              <>
-                <EyeOff className="h-4 w-4 text-[#1995AD]" />
-                <span>Ocultar registros ({filteredLogs.length})</span>
-              </>
-            ) : (
-              <>
-                <Eye className="h-4 w-4 text-[#1995AD]" />
-                <span>Mostrar registros ({hiddenLogIds.length})</span>
-              </>
+          <div className="flex items-center gap-2 flex-wrap">
+            {filteredLogs.length > 0 && (
+              <button
+                type="button"
+                onClick={handleSelectAllActive}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+                  allActiveSelected
+                    ? "bg-[#1995AD]/15 text-[#172B4D] border-[#1995AD]"
+                    : "bg-white text-[#172B4D] border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2]"
+                }`}
+              >
+                <CheckCircle2 className="h-4 w-4 text-[#1995AD]" />
+                <span>
+                  {allActiveSelected
+                    ? "Deseleccionar todos"
+                    : `Seleccionar todos (${filteredLogs.length})`}
+                </span>
+              </button>
             )}
-          </button>
+
+            {selectedLogIds.length > 0 && (
+              <button
+                type="button"
+                onClick={handleHideSelected}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-bold bg-[#1995AD] text-white hover:bg-[#172B4D] transition-all cursor-pointer shadow-xs"
+              >
+                <EyeOff className="h-4 w-4" />
+                <span>Ocultar seleccionados ({selectedLogIds.length})</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsHiddenPanelOpen((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
+                isHiddenPanelOpen
+                  ? "bg-[#172B4D] text-white border-[#172B4D]"
+                  : "bg-white text-[#172B4D] border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2]"
+              }`}
+            >
+              <EyeOff className={`h-4 w-4 ${isHiddenPanelOpen ? "text-[#A1D6E2]" : "text-[#1995AD]"}`} />
+              <span>Registros ocultos ({hiddenLogsList.length})</span>
+              {isHiddenPanelOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         )}
       </div>
+
+      {/* PANEL DESPLEGABLE DE REGISTROS OCULTOS */}
+      {activeTab === "LOGS" && isHiddenPanelOpen && (
+        <div className="bg-white rounded-3xl border-2 border-[#1995AD]/50 p-5 space-y-4 shadow-md animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#AFC8D0]/40 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-[#1995AD]/15 text-[#1995AD] flex items-center justify-center shrink-0">
+                <EyeOff className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-title text-lg text-[#172B4D]">
+                  Registros Ocultos ({hiddenLogsList.length})
+                </h3>
+                <p className="text-xs text-[#172B4D]/65">
+                  Selecciona los registros que deseas regresar a la tabla de movimientos activos
+                </p>
+              </div>
+            </div>
+
+            {hiddenLogsList.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleSelectAllHidden}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F1F1F2] text-[#172B4D] border border-[#AFC8D0] hover:border-[#1995AD] transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#1995AD]" />
+                  <span>
+                    {allHiddenSelected
+                      ? "Deseleccionar todos"
+                      : `Seleccionar todos (${hiddenLogsList.length})`}
+                  </span>
+                </button>
+
+                {selectedHiddenIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreSelectedHidden}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#1995AD] text-white hover:bg-[#172B4D] transition-all cursor-pointer shadow-xs"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Regresar seleccionados ({selectedHiddenIds.length})</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleRestoreAllHidden}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all cursor-pointer shadow-xs"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Regresar todos</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {hiddenLogsList.length === 0 ? (
+            <div className="py-8 text-center text-xs text-[#172B4D]/60 font-medium">
+              No hay registros ocultos en este momento. Selecciona registros en la tabla inferior para ocultarlos aquí.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-[#AFC8D0]/50">
+              <table className="w-full text-left text-xs text-[#172B4D]">
+                <thead className="bg-[#F1F1F2] border-b border-[#AFC8D0]/40 font-bold text-[#172B4D]/75 uppercase">
+                  <tr>
+                    <th className="px-4 py-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={allHiddenSelected}
+                        onChange={handleSelectAllHidden}
+                        aria-label="Seleccionar todos los registros ocultos"
+                        className="h-4 w-4 rounded border-[#AFC8D0] text-[#1995AD] focus:ring-[#1995AD] cursor-pointer accent-[#1995AD]"
+                      />
+                    </th>
+                    <th className="px-4 py-3">Momento</th>
+                    <th className="px-4 py-3">Responsable</th>
+                    <th className="px-4 py-3">Acción Realizada</th>
+                    <th className="px-4 py-3">Detalle</th>
+                    <th className="px-4 py-3 text-right">Regresar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F1F1F2]">
+                  {hiddenLogsList.map((hLog) => {
+                    const isSelected = selectedHiddenIds.includes(hLog.id);
+                    return (
+                      <tr
+                        key={`hidden-${hLog.id}`}
+                        onClick={() => handleToggleSelectHidden(hLog.id)}
+                        className={`transition-colors cursor-pointer ${
+                          isSelected ? "bg-[#1995AD]/10" : "hover:bg-[#F1F1F2]/60"
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectHidden(hLog.id)}
+                            aria-label={`Seleccionar ${hLog.actionTitle}`}
+                            className="h-4 w-4 rounded border-[#AFC8D0] text-[#1995AD] focus:ring-[#1995AD] cursor-pointer accent-[#1995AD]"
+                          />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-[#172B4D]/75">
+                          {hLog.createdAt}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-bold text-[#172B4D]">
+                          {hLog.userName}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-bold text-[#1995AD]">
+                          {hLog.actionTitle}
+                        </td>
+                        <td className="px-4 py-3 text-[#172B4D]/80 max-w-md">
+                          {hLog.actionDescription}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreSingleHidden(hLog.id)}
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-[#1995AD]/15 hover:bg-[#1995AD] text-[#1995AD] hover:text-white font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>Regresar</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* CONTENIDO 1: BITÁCORA DE MOVIMIENTOS ACTIVOS */}
       {activeTab === "LOGS" && (
@@ -988,23 +1215,34 @@ export default function AuditPage() {
               <table className="w-full text-left text-sm text-[#172B4D]">
                 <thead className="bg-[#F1F1F2] border-b border-[#AFC8D0]/40 text-xs font-bold text-[#172B4D]/75 uppercase">
                   <tr>
+                    <th className="px-4 py-3.5 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={allActiveSelected}
+                        onChange={handleSelectAllActive}
+                        disabled={filteredLogs.length === 0}
+                        aria-label="Seleccionar todos los registros del día"
+                        className="h-4 w-4 rounded border-[#AFC8D0] text-[#1995AD] focus:ring-[#1995AD] cursor-pointer accent-[#1995AD]"
+                      />
+                    </th>
                     <th className="px-5 py-3.5">Momento</th>
                     <th className="px-5 py-3.5">Responsable</th>
                     <th className="px-5 py-3.5">Acción Realizada</th>
                     <th className="px-5 py-3.5">Detalle / Explicación</th>
                     <th className="px-5 py-3.5">IP de Conexión</th>
+                    <th className="px-5 py-3.5 text-right">Ocultar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F1F1F2]">
                   {filteredLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-[#BCBABE]">
+                      <td colSpan={7} className="py-12 text-center text-[#BCBABE]">
                         <Info className="h-8 w-8 mx-auto mb-2 text-[#AFC8D0]" />
                         <p className="text-sm font-semibold text-[#172B4D]">
                           La cuenta de movimientos activos está en 0 para esta jornada.
                         </p>
                         <p className="text-xs text-[#172B4D]/60 mt-1 max-w-md mx-auto">
-                          Los movimientos previos fueron exportados o archivados en el informe diario. Puedes ver el detalle completo en la sección de historial inferior.
+                          Los movimientos ocultos se pueden desplegar y regresar desde el botón &quot;Registros ocultos ({hiddenLogsList.length})&quot; superior.
                         </p>
                       </td>
                     </tr>
@@ -1013,9 +1251,27 @@ export default function AuditPage() {
                       const isCron = log.actionCategory === "CRON";
                       const isOtp = log.actionCategory === "OTP";
                       const isReturn = log.actionCategory === "RETURN";
+                      const isSelected = selectedLogIds.includes(log.id);
 
                       return (
-                        <tr key={log.id} className="hover:bg-[#F1F1F2]/60 transition-colors">
+                        <tr
+                          key={log.id}
+                          onClick={() => handleToggleSelectActive(log.id)}
+                          className={`transition-colors cursor-pointer ${
+                            isSelected ? "bg-[#1995AD]/10" : "hover:bg-[#F1F1F2]/60"
+                          }`}
+                        >
+                          {/* Casilla de Selección */}
+                          <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectActive(log.id)}
+                              aria-label={`Seleccionar movimiento ${log.actionTitle}`}
+                              className="h-4 w-4 rounded border-[#AFC8D0] text-[#1995AD] focus:ring-[#1995AD] cursor-pointer accent-[#1995AD]"
+                            />
+                          </td>
+
                           {/* Fecha y Hora */}
                           <td className="px-5 py-4 whitespace-nowrap text-xs text-[#172B4D]/70 font-semibold">
                             <span className="flex items-center gap-1.5">
@@ -1072,6 +1328,19 @@ export default function AuditPage() {
                           {/* IP de Conexión */}
                           <td className="px-5 py-4 whitespace-nowrap font-mono text-xs text-[#172B4D]/60">
                             {log.ipAddress}
+                          </td>
+
+                          {/* Botón rápido para ocultar individualmente */}
+                          <td className="px-5 py-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleHideSingle(log.id)}
+                              title="Ocultar este registro"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-[#172B4D]/70 hover:text-[#1995AD] hover:bg-[#1995AD]/10 border border-transparent hover:border-[#1995AD]/30 transition-all cursor-pointer"
+                            >
+                              <EyeOff className="h-3.5 w-3.5" />
+                              <span>Ocultar</span>
+                            </button>
                           </td>
                         </tr>
                       );
