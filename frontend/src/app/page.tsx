@@ -134,15 +134,10 @@ export default function HomePage() {
         </div>
 
         {/* Saludo Personalizado */}
-        <div className="rounded-3xl bg-gradient-to-r from-[#1995AD] via-[#188299] to-[#172B4D] text-white p-7 sm:p-8 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
-              Hola, {user?.fullName || "Brayan Cuta"}
-            </h2>
-            <p className="text-[#A1D6E2] text-sm sm:text-base mt-1">
-              {roleLabel} — Tienes equipos activos bajo tu responsabilidad técnica.
-            </p>
-          </div>
+        <div className="rounded-3xl bg-gradient-to-r from-[#1995AD] via-[#188299] to-[#172B4D] text-white p-7 sm:p-8 shadow-md">
+          <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
+            Hola, {user?.fullName || "Brayan Cuta"}
+          </h2>
         </div>
 
         {/* 4 KPIs de Alto Valor para el Técnico */}
@@ -322,22 +317,10 @@ export default function HomePage() {
         </div>
 
         {/* Saludo Personalizado */}
-        <div className="rounded-3xl bg-gradient-to-r from-[#172B4D] via-[#145a6b] to-[#1995AD] text-white p-7 sm:p-8 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
-              Hola, {user?.fullName || "Ian Sanchez"}
-            </h2>
-            <p className="text-[#A1D6E2] text-sm sm:text-base mt-1">
-              {roleLabel} — Tienes entregas físicas pendientes por autorizar mediante código OTP.
-            </p>
-          </div>
-          <Link
-            href="/scanner"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold border border-white/25 transition-all self-start md:self-auto"
-          >
-            <QrCode className="h-4 w-4" />
-            <span>Escanear Equipo en Bodega</span>
-          </Link>
+        <div className="rounded-3xl bg-gradient-to-r from-[#172B4D] via-[#145a6b] to-[#1995AD] text-white p-7 sm:p-8 shadow-md">
+          <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
+            Hola, {user?.fullName || "Ian Sanchez"}
+          </h2>
         </div>
 
         {/* 4 KPIs de Alto Valor para el Inspector */}
@@ -505,18 +488,10 @@ export default function HomePage() {
       )}
 
       {/* Saludo institucional con rol */}
-      <div className="rounded-3xl bg-gradient-to-r from-[#1995AD] via-[#188299] to-[#172B4D] text-white p-7 sm:p-8 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
-            Hola, {user?.fullName || "Angie Ramos"}
-          </h2>
-          <p className="text-[#A1D6E2] text-sm sm:text-base mt-1">
-            {roleLabel} — Tienes control total administrativo de inventario, usuarios y auditoría.
-          </p>
-        </div>
-        <p className="text-xs text-white/80 bg-white/15 px-3 py-1.5 rounded-xl self-start sm:self-auto border border-white/20">
-          Haz clic en cualquier indicador para ver el contexto de su función
-        </p>
+      <div className="rounded-3xl bg-gradient-to-r from-[#1995AD] via-[#188299] to-[#172B4D] text-white p-7 sm:p-8 shadow-md">
+        <h2 className="font-title text-2xl sm:text-3xl tracking-tight">
+          Hola, {user?.fullName || "Angie Ramos"}
+        </h2>
       </div>
 
       {/* Los 4 Indicadores Clave del Administrador: Interactivos y con Contexto */}
