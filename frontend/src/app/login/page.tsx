@@ -263,25 +263,25 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#E3EAEE] flex flex-col relative overflow-hidden">
       <div className="flex-1 flex flex-col md:flex-row">
         {/* PANEL IZQUIERDO — Identidad Institucional */}
-        <div className="md:w-1/2 bg-gradient-to-br from-[#1995AD] via-[#68B2C4] to-[#A1D6E2] flex flex-col items-center justify-center px-8 sm:px-12 py-10 transition-all duration-200">
-          <div className="w-full flex flex-col items-center justify-center gap-5">
+        <div className="md:w-1/2 bg-gradient-to-br from-[#1995AD] via-[#68B2C4] to-[#A1D6E2] flex flex-col items-center justify-center px-6 sm:px-10 py-8 transition-all duration-200">
+          <div className="w-full flex flex-col items-center justify-center gap-4">
             <Image
               src="/logo.png"
               alt="AssetGuard 2620 Logo"
-              width={460}
-              height={300}
-              className="h-auto w-[340px] sm:w-[410px] lg:w-[450px] object-contain drop-shadow-md"
+              width={360}
+              height={235}
+              className="h-auto w-[240px] sm:w-[285px] lg:w-[320px] object-contain drop-shadow-md"
               priority
               unoptimized
             />
-            <div className="text-center space-y-2">
-              <h1 className="font-title text-[clamp(2.2rem,5vw,4.5rem)] text-white tracking-tight leading-none drop-shadow-xs whitespace-nowrap">
+            <div className="text-center space-y-1.5">
+              <h1 className="font-title text-[clamp(1.85rem,3.6vw,3.1rem)] text-white tracking-tight leading-none drop-shadow-xs whitespace-nowrap">
                 AssetGuard<span className="text-[#172B4D]">_2620</span>
               </h1>
-              <p className="font-title text-[clamp(1.1rem,2vw,1.5rem)] text-[#172B4D] tracking-wide whitespace-nowrap">
+              <p className="font-title text-[clamp(0.95rem,1.5vw,1.2rem)] text-[#172B4D] tracking-wide whitespace-nowrap">
                 GlobalNet Telecom
               </p>
-              <p className="text-white font-semibold text-lg sm:text-xl lg:text-2xl leading-snug pt-2 max-w-md mx-auto">
+              <p className="text-white font-semibold text-sm sm:text-base lg:text-lg leading-snug pt-1 max-w-sm mx-auto">
                 Sistema centralizado de control de inventario y custodia
               </p>
             </div>
@@ -289,15 +289,15 @@ export default function LoginPage() {
         </div>
 
         {/* PANEL DERECHO — Tarjeta de Inicio de Sesión */}
-        <div className="md:w-1/2 flex items-center justify-center p-4 sm:p-8 bg-[#DDE6EC]">
-          <div className="w-full max-w-2xl bg-white px-8 sm:px-12 py-7 sm:py-9 rounded-3xl border-2 border-[#1995AD]/45 shadow-2xl shadow-[#172B4D]/15 space-y-5">
+        <div className="md:w-1/2 flex items-center justify-center p-4 sm:p-6 bg-[#DDE6EC]">
+          <div className="w-full max-w-lg bg-white px-6 sm:px-9 py-6 sm:py-7 rounded-3xl border-2 border-[#1995AD]/45 shadow-2xl shadow-[#172B4D]/15 space-y-4">
             <div className="text-center">
               <h2
                 style={{
                   fontFamily: '"Arial Black", "Segoe UI Black", "Montserrat", sans-serif',
-                  WebkitTextStroke: "1.5px #172B4D",
+                  WebkitTextStroke: "1px #172B4D",
                 }}
-                className="text-4xl sm:text-5xl font-black text-[#172B4D] tracking-tight leading-none"
+                className="text-3xl sm:text-4xl font-black text-[#172B4D] tracking-tight leading-none"
               >
                 Iniciar Sesión
               </h2>
@@ -347,21 +347,21 @@ export default function LoginPage() {
             )}
 
             {/* Formulario de Login */}
-            <form onSubmit={handleLoginSubmit} noValidate autoComplete="on" className="space-y-5">
-              <div className="space-y-5">
+            <form onSubmit={handleLoginSubmit} noValidate autoComplete="on" className="space-y-4">
+              <div className="space-y-3.5">
                 {/* CAMPO CORREO */}
                 <div
-                  className={`rounded-2xl border-2 p-4 sm:p-5 transition-all ${
+                  className={`rounded-2xl border-2 p-3.5 sm:p-4 transition-all ${
                     emailErrors.length > 0
                       ? "border-red-400 bg-red-50/40"
                       : "border-[#AFC8D0] bg-[#F1F1F2]/80 focus-within:border-[#1995AD] focus-within:bg-white"
                   }`}
                 >
-                  <label htmlFor="login-email" className="block text-sm font-bold text-[#172B4D] uppercase tracking-wider mb-2">
+                  <label htmlFor="login-email" className="block text-xs font-bold text-[#172B4D] uppercase tracking-wider mb-1.5">
                     Correo Electrónico
                   </label>
                   <div className="relative">
-                    <Mail className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Mail className="h-4.5 w-4.5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-email"
                       name="email"
@@ -373,27 +373,27 @@ export default function LoginPage() {
                       value={form.email}
                       onChange={(e) => handleEmailChange(e.target.value)}
                       onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                      className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#BCBABE]/80 bg-white text-base text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
                   </div>
                   {emailErrors.length > 0 && (
-                    <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">{emailErrors.join(" ")}</p>
+                    <p className="mt-1.5 text-xs font-semibold text-red-600">{emailErrors.join(" ")}</p>
                   )}
                 </div>
 
                 {/* CAMPO CONTRASEÑA */}
                 <div
-                  className={`rounded-2xl border-2 p-4 sm:p-5 transition-all ${
+                  className={`rounded-2xl border-2 p-3.5 sm:p-4 transition-all ${
                     passwordErrors.length > 0
                       ? "border-red-400 bg-red-50/40"
                       : "border-[#AFC8D0] bg-[#F1F1F2]/80 focus-within:border-[#1995AD] focus-within:bg-white"
                   }`}
                 >
-                  <label htmlFor="login-password" className="block text-sm font-bold text-[#172B4D] uppercase tracking-wider mb-2">
+                  <label htmlFor="login-password" className="block text-xs font-bold text-[#172B4D] uppercase tracking-wider mb-1.5">
                     Contraseña
                   </label>
                   <div className="relative">
-                    <Lock className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <Lock className="h-4.5 w-4.5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-password"
                       name="password"
@@ -412,18 +412,18 @@ export default function LoginPage() {
                         } catch {}
                       }}
                       onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                      className="w-full pl-11 pr-11 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
+                      className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-[#BCBABE]/80 bg-white text-base text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
                     <button
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, showPwd: !f.showPwd }))}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#BCBABE] hover:text-[#1995AD] cursor-pointer"
                     >
-                      {form.showPwd ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {form.showPwd ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
                     </button>
                   </div>
                   {passwordErrors.length > 0 && (
-                    <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">{passwordErrors.join(" ")}</p>
+                    <p className="mt-1.5 text-xs font-semibold text-red-600">{passwordErrors.join(" ")}</p>
                   )}
                 </div>
               </div>
@@ -489,10 +489,10 @@ export default function LoginPage() {
                   type="submit"
                   disabled={form.isSubmitting}
                   style={{ fontFamily: '"Arial Black", "Segoe UI Black", sans-serif' }}
-                  className="w-full py-5 rounded-2xl bg-gradient-to-r from-[#1995AD] via-[#AFC8D0] to-[#A1D6E2] text-[#172B4D] font-black text-2xl sm:text-3xl tracking-wide hover:opacity-95 disabled:opacity-60 disabled:cursor-wait shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer"
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#1995AD] via-[#AFC8D0] to-[#A1D6E2] text-[#172B4D] font-black text-xl sm:text-2xl tracking-wide hover:opacity-95 disabled:opacity-60 disabled:cursor-wait shadow-md flex items-center justify-center gap-2.5 transition-all cursor-pointer"
                 >
                   <span>{form.isSubmitting ? "Validando..." : "Ingresar"}</span>
-                  <ArrowRight className="h-7 w-7 stroke-[3]" />
+                  <ArrowRight className="h-5 w-5 stroke-[3]" />
                 </button>
               </div>
             </form>
