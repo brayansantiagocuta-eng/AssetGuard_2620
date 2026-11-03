@@ -79,6 +79,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <workingDirectory>${project.basedir}/..</workingDirectory>
+                    <jvmArguments>-Djava.net.preferIPv4Stack=true</jvmArguments>
                 </configuration>
             </plugin>
         </plugins>

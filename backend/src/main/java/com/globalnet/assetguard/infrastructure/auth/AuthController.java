@@ -115,21 +115,7 @@ public class AuthController {
         String email = request.email().trim().toLowerCase(Locale.ROOT);
         Optional<UserRepository.StoredUser> storedUser = userRepository.findByEmail(email);
 
-        if (storedUser.isPresent()) {
-            var user = storedUser.get();
-            String token = passwordResetTokenService.createToken(user.user().id(), email);
-            emailService.sendPasswordResetEmail(email, user.user().fullName(), token);
-
-            jdbcTemplate.update(
-                    """
-                    INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
-                    VALUES (?, 'PASSWORD_RESET_REQUESTED', 'users', ?, NULL, ?, ?)
-                    """,
-                    user.user().id(),
-                    user.user().id(),
-                    "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"EMAIL_SENT\"}",
-                    clientIp(httpRequest));
-        } else {
+        if (storedUser.isEmpty()) {
             jdbcTemplate.update(
                     """
                     INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
@@ -137,7 +123,29 @@ public class AuthController {
                     """,
                     "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"USER_NOT_FOUND\"}",
                     clientIp(httpRequest));
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No se encontró ninguna cuenta registrada con ese correo electrónico.");
         }
+
+        var user = storedUser.get();
+        String token = passwordResetTokenService.createToken(user.user().id(), email);
+        boolean emailSent = emailService.sendPasswordResetEmail(email, user.user().fullName(), token);
+
+        if (!emailSent) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "No se pudo enviar el correo electrónico de recuperación. Por favor verifica tu conexión a internet o las credenciales SMTP."
+            );
+        }
+
+        jdbcTemplate.update(
+                """
+                INSERT INTO audit_logs (user_id, action, entity_name, entity_id, old_value, new_value, ip_address)
+                VALUES (?, 'PASSWORD_RESET_REQUESTED', 'users', ?, NULL, ?, ?)
+                """,
+                user.user().id(),
+                user.user().id(),
+                "{\"email\":\"" + email.replace("\"", "") + "\",\"status\":\"EMAIL_SENT_SMTP\"}",
+                clientIp(httpRequest));
 
         return new MessageResponse("Hemos enviado un enlace de recuperación a tu correo electrónico. Por favor revisa tu bandeja de entrada o spam.");
     }
