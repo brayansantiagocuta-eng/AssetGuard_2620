@@ -44,7 +44,42 @@ const TAB_USER_KEY = "assetguard_tab_user";
 const TAB_EMAIL_KEY = "assetguard_tab_email";
 const TAB_TOKEN_KEY = "assetguard_tab_token";
 const SESSION_TOKEN_KEY = "assetguard_session_token";
+const TOKENS_BY_EMAIL_KEY = "assetguard_tokens_by_email_v1";
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function getTokenForEmail(email: string): string | null {
+  try {
+    const raw = localStorage.getItem(TOKENS_BY_EMAIL_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, string>;
+    return map[email.trim().toLowerCase()] || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTokenForEmail(email: string, token: string): void {
+  try {
+    const raw = localStorage.getItem(TOKENS_BY_EMAIL_KEY);
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+    map[email.trim().toLowerCase()] = token;
+    localStorage.setItem(TOKENS_BY_EMAIL_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+function removeTokenForEmail(email: string): void {
+  try {
+    const raw = localStorage.getItem(TOKENS_BY_EMAIL_KEY);
+    if (!raw) return;
+    const map: Record<string, string> = JSON.parse(raw);
+    delete map[email.trim().toLowerCase()];
+    localStorage.setItem(TOKENS_BY_EMAIL_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
 
 function isAuthUser(value: unknown): value is AuthUser {
   if (typeof value !== "object" || value === null) {
@@ -80,25 +115,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let tabToken: string | null = null;
     if (typeof window !== "undefined") {
       try {
+        // Aislar estrictamente la sesión por ventana/pestaña (sessionStorage)
+        // para que abrir otro perfil en otra ventana nunca reemplace ni mezcle la sesión actual.
         const tabSaved = sessionStorage.getItem(TAB_USER_KEY);
         if (tabSaved) {
           const parsed = JSON.parse(tabSaved);
           if (isAuthUser(parsed)) currentTabUser = parsed;
-        } else {
-          const localSaved = localStorage.getItem(SESSION_USER_KEY);
-          if (localSaved) {
-            const parsed = JSON.parse(localSaved);
-            if (isAuthUser(parsed)) {
-              sessionStorage.setItem(TAB_USER_KEY, localSaved);
-              sessionStorage.setItem(TAB_EMAIL_KEY, parsed.email);
-              currentTabUser = parsed;
-            }
-          }
         }
         if (currentTabUser) {
           setUser(currentTabUser);
+          tabToken =
+            sessionStorage.getItem(TAB_TOKEN_KEY) ||
+            getTokenForEmail(currentTabUser.email);
+        } else {
+          // Si esta ventana no ha iniciado sesión, no heredar la cookie compartida de otra ventana
+          setUser(null);
+          setAuthError(null);
+          return false;
         }
-        tabToken = sessionStorage.getItem(TAB_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
       } catch {}
     }
 
@@ -120,9 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return true;
         }
         try {
-          localStorage.removeItem(SESSION_USER_KEY);
           sessionStorage.removeItem(TAB_USER_KEY);
-          localStorage.removeItem(SESSION_TOKEN_KEY);
           sessionStorage.removeItem(TAB_TOKEN_KEY);
         } catch {}
         setUser(null);
@@ -147,8 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("El servidor devolvió información de usuario no válida.");
       }
 
-      // Si esta pestaña ya tenía un usuario asignado y la cookie compartida devolvió otro usuario distinto,
-      // preservamos el usuario de esta pestaña para evitar colisiones entre perfiles abiertos en paralelo.
+      // Si esta ventana ya tenía un usuario asignado y la cookie compartida devolvió otro usuario distinto,
+      // preservamos el usuario exclusivo de esta ventana.
       const resolvedUser =
         currentTabUser && currentTabUser.email.toLowerCase() !== body.user.email.toLowerCase()
           ? currentTabUser
@@ -158,10 +190,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(resolvedUser));
         sessionStorage.setItem(TAB_EMAIL_KEY, resolvedUser.email);
-        localStorage.setItem(SESSION_USER_KEY, JSON.stringify(resolvedUser));
         if (body.token && resolvedUser.email.toLowerCase() === body.user.email.toLowerCase()) {
           sessionStorage.setItem(TAB_TOKEN_KEY, body.token);
-          localStorage.setItem(SESSION_TOKEN_KEY, body.token);
+          saveTokenForEmail(resolvedUser.email, body.token);
         }
       } catch {}
       setAuthError(null);
@@ -237,11 +268,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(body.user);
       try {
         sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(body.user));
-        sessionStorage.setItem(TAB_EMAIL_KEY, email.trim());
+        sessionStorage.setItem(TAB_EMAIL_KEY, body.user.email);
         localStorage.setItem(SESSION_USER_KEY, JSON.stringify(body.user));
         if (body.token) {
           sessionStorage.setItem(TAB_TOKEN_KEY, body.token);
           localStorage.setItem(SESSION_TOKEN_KEY, body.token);
+          saveTokenForEmail(body.user.email, body.token);
         }
       } catch {
         // ignore
@@ -260,9 +292,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       let tabToken: string | null = null;
       try {
-        tabToken = sessionStorage.getItem(TAB_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
+        tabToken = sessionStorage.getItem(TAB_TOKEN_KEY);
 
-        // Aislar y preservar el correo del usuario que cerró sesión específicamente en esta pestaña
+        // Aislar y preservar el correo del usuario que cerró sesión específicamente en esta ventana
         const currentEmail = user?.email || (() => {
           try {
             const saved = sessionStorage.getItem(TAB_USER_KEY);
@@ -276,6 +308,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const emailClean = currentEmail.trim();
           const emailLower = emailClean.toLowerCase();
           sessionStorage.setItem(TAB_EMAIL_KEY, emailClean);
+          if (!tabToken) {
+            tabToken = getTokenForEmail(emailClean);
+          }
+          removeTokenForEmail(emailClean);
 
           const wasTabRemembered = sessionStorage.getItem("assetguard_tab_remember") === "true";
           const wasGlobalRemembered = localStorage.getItem(`assetguard_remember_${emailLower}`) === "true";
@@ -284,10 +320,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // Limpiar únicamente la sesión activa de ESTA ventana para no afectar otras ventanas abiertas
         sessionStorage.removeItem(TAB_USER_KEY);
-        localStorage.removeItem(SESSION_USER_KEY);
         sessionStorage.removeItem(TAB_TOKEN_KEY);
-        localStorage.removeItem(SESSION_TOKEN_KEY);
       } catch {
         // ignore
       }

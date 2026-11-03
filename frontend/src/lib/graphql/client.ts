@@ -9,15 +9,25 @@ const httpLink = createHttpLink({
 
 const authLink = new ApolloLink((operation, forward) => {
   if (typeof window !== "undefined") {
-    const token =
-      sessionStorage.getItem("assetguard_tab_token") ||
-      localStorage.getItem("assetguard_session_token");
     const tabEmail =
       sessionStorage.getItem("assetguard_tab_email") ||
       (() => {
         try {
-          const u = sessionStorage.getItem("assetguard_tab_user") || localStorage.getItem("assetguard_current_user");
+          const u = sessionStorage.getItem("assetguard_tab_user");
           return u ? JSON.parse(u).email : null;
+        } catch {
+          return null;
+        }
+      })();
+    const token =
+      sessionStorage.getItem("assetguard_tab_token") ||
+      (() => {
+        if (!tabEmail) return null;
+        try {
+          const raw = localStorage.getItem("assetguard_tokens_by_email_v1");
+          if (!raw) return null;
+          const map = JSON.parse(raw) as Record<string, string>;
+          return map[tabEmail.trim().toLowerCase()] || null;
         } catch {
           return null;
         }

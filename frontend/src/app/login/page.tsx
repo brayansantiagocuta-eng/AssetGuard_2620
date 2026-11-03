@@ -22,10 +22,70 @@ import {
 const ADMIN_EMAIL = "valesotelo.0806@gmail.com";
 const ALLOWED_PWD_REGEX = /^[a-zA-Z0-9@#$*_!%&\-]*$/;
 const TAB_EMAIL_KEY = "assetguard_tab_email";
+const TAB_PWD_KEY = "assetguard_tab_pwd";
 const TAB_REMEMBER_KEY = "assetguard_tab_remember";
-const GLOBAL_REMEMBER_KEY = "assetguard_remembered_email";
-const LAST_USER_EMAIL_KEY = "assetguard_last_login_email";
-const LAST_USER_PWD_KEY = "assetguard_last_login_pwd";
+const REMEMBERED_PROFILES_KEY = "assetguard_remembered_profiles_v1";
+const USERS_CACHE_KEY = "assetguard_users_cache_v1";
+
+interface RecommendedAccount {
+  email: string;
+  fullName: string;
+  roleLabel: string;
+  remembered: boolean;
+  savedPassword?: string;
+}
+
+interface StoredProfile {
+  email: string;
+  password?: string;
+  remember: boolean;
+  fullName?: string;
+  roleLabel?: string;
+  updatedAt: number;
+}
+
+const DEFAULT_SYSTEM_ACCOUNTS: Array<{ email: string; fullName: string; roleLabel: string }> = [
+  { email: "valesotelo.0806@gmail.com", fullName: "Angie Ramos", roleLabel: "Administradora" },
+  { email: "lasanita0204@gmail.com", fullName: "Ian Sanchez", roleLabel: "Inspector" },
+  { email: "brayansantiagocuta@gmail.com", fullName: "Brayan Cuta", roleLabel: "Técnico" },
+  { email: "johanmunoz342@gmail.com", fullName: "johan castiblanco", roleLabel: "Administrador" },
+];
+
+function readRememberedProfiles(): Record<string, StoredProfile> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(REMEMBERED_PROFILES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeRememberedProfile(email: string, data: Partial<StoredProfile> & { remember: boolean }) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = email.trim().toLowerCase();
+    if (!key) return;
+    const map = readRememberedProfiles();
+    if (data.remember) {
+      map[key] = {
+        email: email.trim(),
+        password: data.password ?? map[key]?.password ?? "",
+        remember: true,
+        fullName: data.fullName ?? map[key]?.fullName,
+        roleLabel: data.roleLabel ?? map[key]?.roleLabel,
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem(`assetguard_remember_${key}`, "true");
+    } else {
+      delete map[key];
+      localStorage.removeItem(`assetguard_remember_${key}`);
+    }
+    localStorage.setItem(REMEMBERED_PROFILES_KEY, JSON.stringify(map));
+  } catch {}
+}
 
 // Validaciones puras desacopladas del ciclo de vida del componente
 const validateEmail = (val: string): string[] => {
@@ -72,6 +132,8 @@ export default function LoginPage() {
   const [showAdminContact, setShowAdminContact] = useState(false);
   const [copiedAdmin, setCopiedAdmin] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [recommendedAccounts, setRecommendedAccounts] = useState<RecommendedAccount[]>([]);
 
   // Estado del Modal de Recuperación Directa
   const [recovery, setRecovery] = useState({
@@ -86,36 +148,170 @@ export default function LoginPage() {
     success: null as string | null,
   });
 
+  const refreshRecommendations = () => {
+    try {
+      const profiles = readRememberedProfiles();
+      const byEmail = new Map<string, RecommendedAccount>();
+
+      DEFAULT_SYSTEM_ACCOUNTS.forEach((acc) => {
+        const key = acc.email.toLowerCase();
+        const stored = profiles[key];
+        byEmail.set(key, {
+          email: acc.email,
+          fullName: acc.fullName,
+          roleLabel: acc.roleLabel,
+          remembered: !!stored?.remember,
+          savedPassword: stored?.remember ? stored.password : undefined,
+        });
+      });
+
+      const cachedUsersRaw = localStorage.getItem(USERS_CACHE_KEY);
+      if (cachedUsersRaw) {
+        const cachedUsers = JSON.parse(cachedUsersRaw);
+        if (Array.isArray(cachedUsers)) {
+          cachedUsers.forEach((u: any) => {
+            if (u?.email && u?.status !== "INACTIVE") {
+              const key = String(u.email).trim().toLowerCase();
+              const stored = profiles[key];
+              const roleLabel =
+                u.role === "ADMIN"
+                  ? "Administrador"
+                  : u.role === "INSPECTOR"
+                  ? "Inspector"
+                  : "Técnico";
+              byEmail.set(key, {
+                email: String(u.email).trim(),
+                fullName: u.fullName || String(u.email).trim(),
+                roleLabel,
+                remembered: !!stored?.remember,
+                savedPassword: stored?.remember ? stored.password : undefined,
+              });
+            }
+          });
+        }
+      }
+
+      Object.values(profiles).forEach((p) => {
+        if (p?.email) {
+          const key = p.email.trim().toLowerCase();
+          const existing = byEmail.get(key);
+          byEmail.set(key, {
+            email: p.email.trim(),
+            fullName: existing?.fullName || p.fullName || p.email.split("@")[0],
+            roleLabel: existing?.roleLabel || p.roleLabel || "Cuenta guardada",
+            remembered: !!p.remember,
+            savedPassword: p.remember ? p.password : undefined,
+          });
+        }
+      });
+
+      const list = Array.from(byEmail.values()).sort((a, b) => {
+        if (a.remembered !== b.remembered) return a.remembered ? -1 : 1;
+        return a.fullName.localeCompare(b.fullName);
+      });
+      setRecommendedAccounts(list);
+    } catch {}
+  };
+
   useEffect(() => {
     setIsMounted(true);
+    refreshRecommendations();
     try {
-      // Limpiar cualquier contraseña guardada previamente para que no se autocompleten correos ni contraseñas
-      localStorage.removeItem(LAST_USER_PWD_KEY);
-      localStorage.removeItem(LAST_USER_EMAIL_KEY);
-      localStorage.removeItem(GLOBAL_REMEMBER_KEY);
-      sessionStorage.removeItem(TAB_EMAIL_KEY);
-      sessionStorage.removeItem(TAB_REMEMBER_KEY);
+      // Restaurar exclusivamente el inicio de sesión recordado en ESTA ventana (sessionStorage)
+      // sin que otra ventana lo reemplace.
+      const tabEmail = sessionStorage.getItem(TAB_EMAIL_KEY)?.trim() || "";
+      const tabRememberFlag = sessionStorage.getItem(TAB_REMEMBER_KEY);
+      const tabPwd = sessionStorage.getItem(TAB_PWD_KEY) || "";
+      const profiles = readRememberedProfiles();
+
+      if (tabEmail) {
+        const lower = tabEmail.toLowerCase();
+        const storedProfile = profiles[lower];
+        const isRemembered =
+          tabRememberFlag === "true" ||
+          (tabRememberFlag === null && !!storedProfile?.remember);
+
+        if (isRemembered) {
+          const resolvedPwd = tabPwd || storedProfile?.password || "";
+          setForm((f) => ({
+            ...f,
+            email: tabEmail,
+            password: resolvedPwd,
+            remember: true,
+          }));
+          sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
+        }
+      }
     } catch {}
   }, []);
 
   const emailErrors = touched.email ? validateEmail(form.email) : [];
   const passwordErrors = touched.password && !form.password ? ["Ingresa tu contraseña."] : [];
 
+  const filteredSuggestions = recommendedAccounts.filter((acc) => {
+    const q = form.email.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      acc.email.toLowerCase().includes(q) ||
+      acc.fullName.toLowerCase().includes(q) ||
+      acc.roleLabel.toLowerCase().includes(q)
+    );
+  });
+
+  const handleSelectRecommendation = (acc: RecommendedAccount) => {
+    const profiles = readRememberedProfiles();
+    const stored = profiles[acc.email.toLowerCase()];
+    const shouldRemember = !!stored?.remember || acc.remembered;
+    const savedPwd = shouldRemember ? stored?.password || acc.savedPassword || "" : "";
+
+    setForm((f) => ({
+      ...f,
+      email: acc.email,
+      password: shouldRemember ? savedPwd : "",
+      remember: shouldRemember,
+    }));
+    setTouched((t) => ({ ...t, email: false }));
+    setFeedback({ err: null, success: null });
+    setShowSuggestions(false);
+
+    try {
+      sessionStorage.setItem(TAB_EMAIL_KEY, acc.email);
+      sessionStorage.setItem(TAB_REMEMBER_KEY, shouldRemember ? "true" : "false");
+      if (shouldRemember && savedPwd) {
+        sessionStorage.setItem(TAB_PWD_KEY, savedPwd);
+      } else {
+        sessionStorage.removeItem(TAB_PWD_KEY);
+      }
+    } catch {}
+  };
+
   const handleEmailChange = (val: string) => {
     setForm((f) => ({ ...f, email: val }));
     setFeedback({ err: null, success: null });
+    setShowSuggestions(true);
     try {
       sessionStorage.setItem(TAB_EMAIL_KEY, val);
       const clean = val.trim().toLowerCase();
-      if (clean && localStorage.getItem(`assetguard_remember_${clean}`) === "true") {
-        setForm((f) => ({ ...f, remember: true }));
+      const profiles = readRememberedProfiles();
+      const stored = clean ? profiles[clean] : undefined;
+      if (stored?.remember) {
+        setForm((f) => ({
+          ...f,
+          email: val,
+          password: stored.password || f.password,
+          remember: true,
+        }));
         sessionStorage.setItem(TAB_REMEMBER_KEY, "true");
+        if (stored.password) {
+          sessionStorage.setItem(TAB_PWD_KEY, stored.password);
+        }
       }
     } catch {}
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSuggestions(false);
     setTouched({ email: true, password: true });
     if (validateEmail(form.email).length > 0 || !form.password) {
       setFeedback({ err: "Completa los requisitos indicados en los campos.", success: null });
@@ -127,6 +323,21 @@ export default function LoginPage() {
       const cleanEmail = form.email.trim();
       const res = await login(cleanEmail, form.password);
       if (res.success) {
+        try {
+          sessionStorage.setItem(TAB_EMAIL_KEY, cleanEmail);
+          sessionStorage.setItem(TAB_REMEMBER_KEY, form.remember ? "true" : "false");
+          if (form.remember) {
+            sessionStorage.setItem(TAB_PWD_KEY, form.password);
+            writeRememberedProfile(cleanEmail, {
+              password: form.password,
+              remember: true,
+            });
+          } else {
+            sessionStorage.removeItem(TAB_PWD_KEY);
+            writeRememberedProfile(cleanEmail, { remember: false });
+          }
+          refreshRecommendations();
+        } catch {}
         setFeedback({ err: null, success: "¡Acceso concedido! Ingresando..." });
         window.dispatchEvent(new CustomEvent("assetguard:wave-start"));
         setTimeout(() => router.replace("/"), 1150);
@@ -264,11 +475,11 @@ export default function LoginPage() {
             )}
 
             {/* Formulario de Login */}
-            <form onSubmit={handleLoginSubmit} noValidate autoComplete="off" className="space-y-5">
+            <form onSubmit={handleLoginSubmit} noValidate autoComplete="on" className="space-y-5">
               <div className="space-y-5">
-                {/* CAMPO CORREO */}
+                {/* CAMPO CORREO CON RECOMENDACIONES DE INICIO DE SESIÓN */}
                 <div
-                  className={`rounded-2xl border-2 p-4 sm:p-5 transition-all ${
+                  className={`rounded-2xl border-2 p-4 sm:p-5 transition-all relative ${
                     emailErrors.length > 0
                       ? "border-red-400 bg-red-50/40"
                       : "border-[#AFC8D0] bg-[#F1F1F2]/80 focus-within:border-[#1995AD] focus-within:bg-white"
@@ -281,23 +492,65 @@ export default function LoginPage() {
                     <Mail className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-email"
-                      name="ag_auth_field_identifier"
-                      type="text"
+                      name="email"
+                      type="email"
                       inputMode="email"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      data-lpignore="true"
-                      data-1p-ignore="true"
-                      data-form-type="other"
+                      autoComplete="username"
                       required
                       placeholder="usuario@globalnet.com"
                       value={form.email}
+                      onFocus={() => {
+                        refreshRecommendations();
+                        setShowSuggestions(true);
+                      }}
                       onChange={(e) => handleEmailChange(e.target.value)}
-                      onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                      onBlur={() => {
+                        setTimeout(() => setShowSuggestions(false), 180);
+                        setTouched((t) => ({ ...t, email: true }));
+                      }}
                       className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
+
+                    {/* Desplegable de inicios de sesión recomendados y recordados (exclusivo del login) */}
+                    {showSuggestions && filteredSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-white rounded-2xl border-2 border-[#1995AD]/50 shadow-xl overflow-hidden divide-y divide-[#F1F1F2]">
+                        <div className="px-3.5 py-2 bg-[#F1F1F2]/80 text-[11px] font-bold uppercase tracking-wider text-[#172B4D]/70 flex items-center justify-between">
+                          <span>Inicios de sesión recomendados</span>
+                          <span className="text-[#1995AD]">Clic para elegir</span>
+                        </div>
+                        <div className="max-h-52 overflow-y-auto">
+                          {filteredSuggestions.map((acc) => (
+                            <button
+                              key={acc.email}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleSelectRecommendation(acc);
+                              }}
+                              className="w-full px-4 py-2.5 text-left hover:bg-[#A1D6E2]/25 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-[#172B4D] truncate">
+                                    {acc.fullName}
+                                  </span>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#1995AD]/15 text-[#1995AD]">
+                                    {acc.roleLabel}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-[#172B4D]/75 truncate">{acc.email}</p>
+                              </div>
+                              {acc.remembered && (
+                                <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-bold text-emerald-700">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                  Recordado
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {emailErrors.length > 0 && (
                     <p className="mt-2 text-xs sm:text-sm font-semibold text-red-600">{emailErrors.join(" ")}</p>
@@ -319,21 +572,22 @@ export default function LoginPage() {
                     <Lock className="h-5 w-5 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       id="login-password"
-                      name="ag_auth_field_secret"
-                      type="text"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      data-lpignore="true"
-                      data-1p-ignore="true"
-                      data-form-type="other"
+                      name="password"
+                      type={form.showPwd ? "text" : "password"}
+                      autoComplete="current-password"
                       required
                       placeholder="Ingresa tu contraseña"
                       value={form.password}
-                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      onChange={(e) => {
+                        const nextPwd = e.target.value;
+                        setForm((f) => ({ ...f, password: nextPwd }));
+                        try {
+                          if (form.remember) {
+                            sessionStorage.setItem(TAB_PWD_KEY, nextPwd);
+                          }
+                        } catch {}
+                      }}
                       onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                      style={!form.showPwd && form.password ? ({ WebkitTextSecurity: "disc" } as React.CSSProperties) : undefined}
                       className="w-full pl-11 pr-11 py-3.5 rounded-xl border border-[#BCBABE]/80 bg-white text-lg text-[#172B4D] placeholder:text-[#BCBABE] focus:outline-hidden focus:ring-2 focus:ring-[#1995AD]"
                     />
                     <button
@@ -363,18 +617,21 @@ export default function LoginPage() {
                         try {
                           sessionStorage.setItem(TAB_REMEMBER_KEY, checked ? "true" : "false");
                           const curEmail = form.email.trim();
-                          const lower = curEmail.toLowerCase();
                           if (curEmail) {
+                            sessionStorage.setItem(TAB_EMAIL_KEY, curEmail);
                             if (checked) {
-                              sessionStorage.setItem(TAB_EMAIL_KEY, curEmail);
-                              localStorage.setItem(`assetguard_remember_${lower}`, "true");
-                              localStorage.setItem(GLOBAL_REMEMBER_KEY, curEmail);
-                            } else {
-                              localStorage.removeItem(`assetguard_remember_${lower}`);
-                              if (localStorage.getItem(GLOBAL_REMEMBER_KEY)?.toLowerCase() === lower) {
-                                localStorage.removeItem(GLOBAL_REMEMBER_KEY);
+                              if (form.password) {
+                                sessionStorage.setItem(TAB_PWD_KEY, form.password);
                               }
+                              writeRememberedProfile(curEmail, {
+                                password: form.password,
+                                remember: true,
+                              });
+                            } else {
+                              sessionStorage.removeItem(TAB_PWD_KEY);
+                              writeRememberedProfile(curEmail, { remember: false });
                             }
+                            refreshRecommendations();
                           }
                         } catch {}
                       }}
