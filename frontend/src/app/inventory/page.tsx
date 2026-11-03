@@ -910,17 +910,12 @@ export default function InventoryPage() {
     return new Set<string>();
   }, [user?.fullName]);
 
-  // Permiso de descarga QR: Administradores e Inspectores tienen acceso total;
-  // El Técnico solo puede ver y descargar el QR si ya solicitó el equipo.
+  // Permiso de descarga QR: Solo Administradores e Inspectores pueden descargar la etiqueta QR;
+  // El Técnico solo puede visualizar el QR en pantalla.
   const canDownloadPreviewQr = useMemo(() => {
     if (!previewQrAsset) return false;
-    if (role === "ADMIN" || role === "INSPECTOR") return true;
-    if (role === "TECHNICIAN") {
-      const s = previewQrAsset.serialNumber.toUpperCase();
-      return myRequestedSerials.has(s) || previewQrAsset.status === "ON_LOAN" || previewQrAsset.status === "RESERVED";
-    }
-    return false;
-  }, [previewQrAsset, role, myRequestedSerials]);
+    return role === "ADMIN" || role === "INSPECTOR";
+  }, [previewQrAsset, role]);
 
   const filteredAssets = assets.filter((asset) => {
     // Si el usuario es Técnico:
@@ -2613,37 +2608,14 @@ export default function InventoryPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-1">
-                  <p className="font-bold flex items-center gap-1.5 text-amber-800">
-                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                    Acceso Restringido al Código QR
-                  </p>
-                  <p className="text-[11px] text-amber-800/80 leading-relaxed">
-                    Como técnico operativo, no puedes descargar la etiqueta QR antes de solicitar el préstamo del equipo. Primero debes registrar la solicitud de préstamo para habilitar su código oficial de custodia.
-                  </p>
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewQrAsset(null)}
-                    className="px-4 py-2.5 rounded-xl border border-[#AFC8D0] text-[#172B4D] font-bold text-sm hover:bg-[#F1F1F2] cursor-pointer"
-                  >
-                    Entendido
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = previewQrAsset;
-                      setPreviewQrAsset(null);
-                      setSelectedAssetForRequest(target);
-                    }}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#1995AD] to-[#148296] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
-                  >
-                    <Send className="h-4 w-4" />
-                    <span>Solicitar Préstamo Ahora</span>
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#F1F1F2]">
+                <button
+                  type="button"
+                  onClick={() => setPreviewQrAsset(null)}
+                  className="px-5 py-2.5 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm transition-colors cursor-pointer"
+                >
+                  Cerrar
+                </button>
               </div>
             )}
           </div>

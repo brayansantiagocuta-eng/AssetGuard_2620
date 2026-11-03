@@ -301,8 +301,17 @@ export default function LoansPage() {
     })),
   ], [availableAssetsList]);
 
+  // Préstamos visibles según el rol: El técnico SOLO ve los préstamos que él mismo realizó (nunca los de Angie u otros usuarios)
+  const roleScopedLoans = useMemo(() => {
+    if (!isTechnician) return localLoans;
+    const currentTechName = (user?.fullName || "Brayan Cuta").trim().toLowerCase();
+    return localLoans.filter(
+      (item) => (item.technicianName || "").trim().toLowerCase() === currentTechName
+    );
+  }, [localLoans, isTechnician, user?.fullName]);
+
   const filteredLoans = useMemo(() => {
-    return localLoans.filter((item) => {
+    return roleScopedLoans.filter((item) => {
       const matchesSearch =
         searchQuery === "" ||
         item.assetSerial.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -319,16 +328,16 @@ export default function LoansPage() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [localLoans, searchQuery, filterStatus]);
+  }, [roleScopedLoans, searchQuery, filterStatus]);
 
   const filterCounts = useMemo(() => ({
-    TODOS: localLoans.length,
-    SOLICITADOS: localLoans.filter((l) => l.status === "REQUESTED").length,
-    APROBADOS: localLoans.filter((l) => l.status === "APPROVED").length,
-    ACTIVOS: localLoans.filter((l) => l.status === "ACTIVE").length,
-    EN_MORA: localLoans.filter((l) => l.status === "OVERDUE").length,
-    DEVUELTOS: localLoans.filter((l) => l.status === "RETURNED").length,
-  }), [localLoans]);
+    TODOS: roleScopedLoans.length,
+    SOLICITADOS: roleScopedLoans.filter((l) => l.status === "REQUESTED").length,
+    APROBADOS: roleScopedLoans.filter((l) => l.status === "APPROVED").length,
+    ACTIVOS: roleScopedLoans.filter((l) => l.status === "ACTIVE").length,
+    EN_MORA: roleScopedLoans.filter((l) => l.status === "OVERDUE").length,
+    DEVUELTOS: roleScopedLoans.filter((l) => l.status === "RETURNED").length,
+  }), [roleScopedLoans]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -720,7 +729,7 @@ export default function LoansPage() {
           <Search className="h-4 w-4 text-[#1995AD] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por serie, modelo o técnico..."
+            placeholder={isTechnician ? "Buscar por serie o modelo..." : "Buscar por serie, modelo o técnico..."}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-[#AFC8D0] bg-[#F1F1F2]/60 focus:bg-white focus:outline-hidden focus:border-[#1995AD]"
