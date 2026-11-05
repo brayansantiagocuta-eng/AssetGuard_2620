@@ -1028,26 +1028,7 @@ export default function AuditPage() {
 
         {activeTab === "LOGS" && (
           <div className="flex items-center gap-2 flex-wrap">
-            {filteredLogs.length > 0 && (
-              <button
-                type="button"
-                onClick={handleSelectAllActive}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold border transition-all cursor-pointer shadow-2xs ${
-                  allActiveSelected
-                    ? "bg-[#1995AD]/15 text-[#172B4D] border-[#1995AD]"
-                    : "bg-white text-[#172B4D] border-[#AFC8D0]/80 hover:border-[#1995AD] hover:bg-[#F1F1F2]"
-                }`}
-              >
-                <CheckCircle2 className="h-4 w-4 text-[#1995AD]" />
-                <span>
-                  {allActiveSelected
-                    ? "Deseleccionar todos"
-                    : `Seleccionar todos (${filteredLogs.length})`}
-                </span>
-              </button>
-            )}
-
-            {selectedLogIds.length > 0 && (
+            {selectedLogIds.length > 0 ? (
               <button
                 type="button"
                 onClick={handleHideSelected}
@@ -1055,6 +1036,15 @@ export default function AuditPage() {
               >
                 <EyeOff className="h-4 w-4" />
                 <span>Ocultar seleccionados ({selectedLogIds.length})</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl text-xs font-bold bg-[#F1F1F2] text-[#172B4D]/40 border border-[#AFC8D0]/40 cursor-not-allowed shadow-2xs"
+              >
+                <EyeOff className="h-4 w-4 text-[#172B4D]/40" />
+                <span>Ocultar seleccionados (0)</span>
               </button>
             )}
 
@@ -1099,20 +1089,7 @@ export default function AuditPage() {
 
             {hiddenLogsList.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleSelectAllHidden}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F1F1F2] text-[#172B4D] border border-[#AFC8D0] hover:border-[#1995AD] transition-all cursor-pointer"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-[#1995AD]" />
-                  <span>
-                    {allHiddenSelected
-                      ? "Deseleccionar todos"
-                      : `Seleccionar todos (${hiddenLogsList.length})`}
-                  </span>
-                </button>
-
-                {selectedHiddenIds.length > 0 && (
+                {selectedHiddenIds.length > 0 ? (
                   <button
                     type="button"
                     onClick={handleRestoreSelectedHidden}
@@ -1121,16 +1098,16 @@ export default function AuditPage() {
                     <RotateCcw className="h-3.5 w-3.5" />
                     <span>Regresar seleccionados ({selectedHiddenIds.length})</span>
                   </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#F1F1F2] text-[#172B4D]/40 border border-[#AFC8D0]/40 cursor-not-allowed"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 text-[#172B4D]/40" />
+                    <span>Regresar seleccionados (0)</span>
+                  </button>
                 )}
-
-                <button
-                  type="button"
-                  onClick={handleRestoreAllHidden}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-all cursor-pointer shadow-xs"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  <span>Regresar todos</span>
-                </button>
               </div>
             )}
           </div>
