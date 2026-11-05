@@ -1350,15 +1350,15 @@ export default function InventoryPage() {
               <button
                 type="button"
                 onClick={toggleNewAssetForm}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer shadow-xs ${
                   isNewAssetOpen
                     ? "bg-[#172B4D] text-[#A1D6E2] ring-2 ring-[#1995AD]"
                     : "bg-[#1995AD] hover:bg-[#172B4D] text-white"
                 }`}
-                title="Abrir o cerrar el formulario de registro de equipo"
+                title="Abrir o cerrar el formulario de registro"
               >
                 <Plus className={`h-4 w-4 transition-transform duration-200 ${isNewAssetOpen ? "rotate-45" : ""}`} />
-                <span>Registrar Equipo</span>
+                <span>Registrar</span>
               </button>
             </div>
           )}
@@ -1603,7 +1603,7 @@ export default function InventoryPage() {
                 <Plus className={`h-6 w-6 transition-transform duration-200 ${isNewAssetOpen ? "rotate-45" : ""}`} />
               </div>
               <h3 className="font-title text-lg sm:text-xl tracking-wide text-white">
-                Registrar Equipo
+                Registrar
               </h3>
             </div>
 
@@ -2003,7 +2003,7 @@ export default function InventoryPage() {
                   type="submit"
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#1995AD] to-[#172B4D] hover:from-[#172B4D] hover:to-[#1995AD] text-white font-bold text-sm shadow-md transition-all cursor-pointer"
                 >
-                  Registrar Equipo
+                  Registrar
                 </button>
               </div>
             </form>
