@@ -687,10 +687,10 @@ export default function LoansPage() {
               setIsRequestModalOpen(true);
               setRequestError(null);
             }}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-[#1995AD] to-[#148296] text-white font-bold text-sm shadow-md hover:shadow-lg hover:scale-[1.02] transition-all cursor-pointer"
+            className="px-5 py-3 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm inline-flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
           >
-            <Plus className="h-5 w-5 stroke-[2.5]" />
-            <span>Solicitar Préstamo</span>
+            <Plus className="h-4 w-4" />
+            <span>Registrar</span>
           </button>
         </div>
       </div>
@@ -982,8 +982,8 @@ export default function LoansPage() {
                   <Plus className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-title text-xl text-[#172B4D]">Solicitar Equipo</h3>
-                  <p className="text-xs text-[#172B4D]/60">Registro de solicitud de asignación de custodia</p>
+                  <h3 className="font-title text-xl text-[#172B4D]">Registrar</h3>
+                  <p className="text-xs text-[#172B4D]/60">Solicitud de asignación y custodia de equipo</p>
                 </div>
               </div>
               <button
@@ -1079,7 +1079,7 @@ export default function LoansPage() {
                   disabled={creatingRequest}
                   className="flex-1 py-3 rounded-xl bg-[#1995AD] hover:bg-[#172B4D] text-white font-bold text-sm transition-colors cursor-pointer"
                 >
-                  {creatingRequest ? "Enviando..." : "Confirmar Solicitud"}
+                  {creatingRequest ? "Enviando..." : "Registrar"}
                 </button>
               </div>
             </form>
