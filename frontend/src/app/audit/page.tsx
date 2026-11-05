@@ -70,9 +70,21 @@ export interface DailySummaryReport {
 
 const STORAGE_KEY_DAILY_REPORTS = "assetguard_audit_daily_reports";
 const STORAGE_KEY_HIDDEN_LOGS = "assetguard_audit_hidden_logs_v3";
-const TODAY_PREFIX = new Date().toISOString().split("T")[0];
+const STORAGE_KEY_HIDDEN_CRON_JOBS = "assetguard_audit_hidden_cron_jobs_v1";
+
+function getDateOffset(daysAgo: number): string {
+  const d = new Date(Date.now() - daysAgo * 86400000);
+  return d.toISOString().split("T")[0];
+}
+
+const D_0 = getDateOffset(0);
+const D_1 = getDateOffset(1);
+const D_2 = getDateOffset(2);
+const D_3 = getDateOffset(3);
+const D_4 = getDateOffset(4);
 
 const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
+  // Hoy (D_0)
   {
     id: "AUD-101",
     userName: "Brayan Cuta",
@@ -83,7 +95,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "LOAN",
     entityName: "Préstamos",
     ipAddress: "192.168.10.45",
-    createdAt: `${TODAY_PREFIX} 08:15`,
+    createdAt: `${D_0} 08:15`,
   },
   {
     id: "AUD-102",
@@ -95,7 +107,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "LOAN",
     entityName: "Préstamos",
     ipAddress: "192.168.10.10",
-    createdAt: `${TODAY_PREFIX} 08:20`,
+    createdAt: `${D_0} 08:20`,
   },
   {
     id: "AUD-103",
@@ -107,7 +119,7 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "OTP",
     entityName: "Custodia Física",
     ipAddress: "192.168.10.12",
-    createdAt: `${TODAY_PREFIX} 08:30`,
+    createdAt: `${D_0} 08:30`,
   },
   {
     id: "AUD-104",
@@ -115,11 +127,11 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     userRole: "Sistema Programado",
     actionCode: "DAILY_OVERDUE_DETECTION",
     actionTitle: "Monitoreo Nocturno de Mora",
-    actionDescription: "Revisó préstamos vencidos a la medianoche y actualizó el estado a 'En Mora'",
+    actionDescription: "Revisó préstamos vigentes a la medianoche. Todos los plazos vigentes.",
     actionCategory: "CRON",
     entityName: "Monitoreo",
     ipAddress: "127.0.0.1 (Servidor)",
-    createdAt: `${TODAY_PREFIX} 00:00`,
+    createdAt: `${D_0} 00:00`,
   },
   {
     id: "AUD-105",
@@ -131,28 +143,171 @@ const INITIAL_FALLBACK_LOGS: HumanAuditEntry[] = [
     actionCategory: "RETURN",
     entityName: "Inventario",
     ipAddress: "192.168.10.12",
-    createdAt: `${TODAY_PREFIX} 08:45`,
+    createdAt: `${D_0} 08:45`,
+  },
+
+  // Ayer (D_1)
+  {
+    id: "AUD-106",
+    userName: "Ian Sanchez",
+    userRole: "Inspector de Bodega",
+    actionCode: "CALIBRATION_CHECK",
+    actionTitle: "Inspección y Calibración",
+    actionDescription: "Verificó calibración semestral de reflectómetro óptico MaxTester 720C",
+    actionCategory: "CALIBRATION",
+    entityName: "Calibración",
+    ipAddress: "192.168.10.12",
+    createdAt: `${D_1} 14:10`,
+  },
+  {
+    id: "AUD-107",
+    userName: "Brayan Cuta",
+    userRole: "Técnico de Campo",
+    actionCode: "CREATE_LOAN_REQUEST",
+    actionTitle: "Solicitud de Préstamo",
+    actionDescription: "Solicitó analizador de red para despliegue metropolitano FTTH",
+    actionCategory: "LOAN",
+    entityName: "Préstamos",
+    ipAddress: "192.168.10.45",
+    createdAt: `${D_1} 09:30`,
+  },
+  {
+    id: "AUD-108",
+    userName: "Angie Ramos",
+    userRole: "Administradora",
+    actionCode: "APPROVE_LOAN_REQUEST",
+    actionTitle: "Aprobación de Solicitud",
+    actionDescription: "Aprobó solicitud de analizador de red para jornada de campo",
+    actionCategory: "LOAN",
+    entityName: "Préstamos",
+    ipAddress: "192.168.10.10",
+    createdAt: `${D_1} 10:00`,
+  },
+
+  // Hace 2 días (D_2)
+  {
+    id: "AUD-109",
+    userName: "Ian Sanchez",
+    userRole: "Inspector de Bodega",
+    actionCode: "VALIDATE_OTP_DELIVERY",
+    actionTitle: "Entrega con PIN OTP",
+    actionDescription: "Entrega de microscopio digital con validación de credencial OTP",
+    actionCategory: "OTP",
+    entityName: "Custodia Física",
+    ipAddress: "192.168.10.12",
+    createdAt: `${D_2} 11:20`,
+  },
+  {
+    id: "AUD-110",
+    userName: "Brayan Cuta",
+    userRole: "Técnico de Campo",
+    actionCode: "RETURN_LOAN",
+    actionTitle: "Devolución de Equipo",
+    actionDescription: "Devolución física en bodega de sonda óptica sin observaciones",
+    actionCategory: "RETURN",
+    entityName: "Inventario",
+    ipAddress: "192.168.10.45",
+    createdAt: `${D_2} 17:15`,
+  },
+
+  // Hace 3 días (D_3)
+  {
+    id: "AUD-111",
+    userName: "Robot Automático CRON",
+    userRole: "Sistema Programado",
+    actionCode: "DAILY_OVERDUE_DETECTION",
+    actionTitle: "Monitoreo Nocturno de Mora",
+    actionDescription: "Detección automática nocturna: 1 equipo clasificado En Mora",
+    actionCategory: "CRON",
+    entityName: "Monitoreo",
+    ipAddress: "127.0.0.1 (Servidor)",
+    createdAt: `${D_3} 00:00`,
+  },
+  {
+    id: "AUD-112",
+    userName: "Angie Ramos",
+    userRole: "Administradora",
+    actionCode: "CREATE_USER",
+    actionTitle: "Registro de Usuario",
+    actionDescription: "Creación de credencial para operador técnico de soporte",
+    actionCategory: "USER",
+    entityName: "Usuarios",
+    ipAddress: "192.168.10.10",
+    createdAt: `${D_3} 15:40`,
+  },
+
+  // Hace 4 días (D_4)
+  {
+    id: "AUD-113",
+    userName: "Ian Sanchez",
+    userRole: "Inspector de Bodega",
+    actionCode: "RETURN_LOAN",
+    actionTitle: "Devolución de Equipo",
+    actionDescription: "Recepción de fusionadora Sumitomo T-72C con revisión de electrodos",
+    actionCategory: "RETURN",
+    entityName: "Inventario",
+    ipAddress: "192.168.10.12",
+    createdAt: `${D_4} 16:30`,
+  },
+  {
+    id: "AUD-114",
+    userName: "Brayan Cuta",
+    userRole: "Técnico de Campo",
+    actionCode: "CREATE_LOAN_REQUEST",
+    actionTitle: "Solicitud de Préstamo",
+    actionDescription: "Solicitud de reflectómetro para diagnóstico de atenuación en empalmes",
+    actionCategory: "LOAN",
+    entityName: "Préstamos",
+    ipAddress: "192.168.10.45",
+    createdAt: `${D_4} 10:15`,
   },
 ];
 
 const INITIAL_FALLBACK_CRON_JOBS: HumanCronExecution[] = [
   {
+    id: "JOB-205",
+    jobName: "DailyOverdueDetectionJob",
+    jobTitle: "Detección Diaria de Vencimientos",
+    executedAt: `${D_0} 00:00`,
+    status: "SUCCESS",
+    recordsProcessed: 1,
+    humanSummary: "Revisión nocturna: 1 préstamo con tiempo vencido marcado En Mora.",
+  },
+  {
+    id: "JOB-204",
+    jobName: "DailyOverdueDetectionJob",
+    jobTitle: "Detección Diaria de Vencimientos",
+    executedAt: `${D_1} 00:00`,
+    status: "SUCCESS",
+    recordsProcessed: 0,
+    humanSummary: "Revisión nocturna: Todos los préstamos al día.",
+  },
+  {
+    id: "JOB-203",
+    jobName: "DailyOverdueDetectionJob",
+    jobTitle: "Detección Diaria de Vencimientos",
+    executedAt: `${D_2} 00:00`,
+    status: "SUCCESS",
+    recordsProcessed: 0,
+    humanSummary: "Revisión nocturna: Préstamos al día sin novedades.",
+  },
+  {
     id: "JOB-202",
     jobName: "DailyOverdueDetectionJob",
     jobTitle: "Detección Diaria de Vencimientos",
-    executedAt: "2026-10-26 00:00",
+    executedAt: `${D_3} 00:00`,
     status: "SUCCESS",
     recordsProcessed: 1,
-    humanSummary: "Se detectó 1 equipo con fecha de retorno vencida y se marcó automáticamente En Mora.",
+    humanSummary: "Revisión nocturna: 1 equipo clasificado En Mora tras vencer plazo pactado.",
   },
   {
     id: "JOB-201",
     jobName: "DailyOverdueDetectionJob",
     jobTitle: "Detección Diaria de Vencimientos",
-    executedAt: "2026-10-25 00:00",
+    executedAt: `${D_4} 00:00`,
     status: "SUCCESS",
     recordsProcessed: 0,
-    humanSummary: "Todos los préstamos activos se encontraban dentro del plazo autorizado.",
+    humanSummary: "Revisión nocturna: Todos los equipos en orden y calibración vigente.",
   },
 ];
 
@@ -263,6 +418,7 @@ export default function AuditPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const [hiddenLogIds, setHiddenLogIds] = useState<string[]>([]);
+  const [hiddenCronIds, setHiddenCronIds] = useState<string[]>([]);
   const [dailyReports, setDailyReports] = useState<DailySummaryReport[]>([]);
 
   useEffect(() => {
@@ -271,6 +427,11 @@ export default function AuditPage() {
       if (savedHidden) {
         const parsed = JSON.parse(savedHidden);
         if (Array.isArray(parsed)) setHiddenLogIds(parsed);
+      }
+      const savedHiddenCron = localStorage.getItem(STORAGE_KEY_HIDDEN_CRON_JOBS);
+      if (savedHiddenCron) {
+        const parsed = JSON.parse(savedHiddenCron);
+        if (Array.isArray(parsed)) setHiddenCronIds(parsed);
       }
       const savedReports = localStorage.getItem(STORAGE_KEY_DAILY_REPORTS);
       if (savedReports) {
@@ -405,14 +566,22 @@ export default function AuditPage() {
     }
     list.push(...INITIAL_FALLBACK_LOGS);
     const seen = new Set<string>();
+    const seenCronMinute = new Set<string>();
     return list.filter((item) => {
       if (seen.has(item.id)) return false;
       seen.add(item.id);
+
+      // Eliminar registros duplicados consecutivos del robot CRON por minuto
+      if (item.actionCategory === "CRON") {
+        const cronKey = `${item.actionCode}_${item.createdAt.slice(0, 16)}`;
+        if (seenCronMinute.has(cronKey)) return false;
+        seenCronMinute.add(cronKey);
+      }
       return true;
     });
   }, [logsData, localAuditEvents]);
 
-  // Mapear ejecuciones CRON de GraphQL + ejecuciones manuales
+  // Mapear ejecuciones CRON de GraphQL + ejecuciones manuales con deduplicación inteligente
   const cronJobs = useMemo<HumanCronExecution[]>(() => {
     const list: HumanCronExecution[] = [];
     if (jobsData?.jobExecutions?.items && jobsData.jobExecutions.items.length > 0) {
@@ -427,16 +596,47 @@ export default function AuditPage() {
           recordsProcessed: count,
           humanSummary:
             count === 0
-              ? "Verificación exitosa: Todos los préstamos están dentro del plazo."
-              : `Se detectaron ${count} equipo(s) con tiempo vencido y se cambiaron a 'En Mora'.`,
+              ? "Revisión nocturna: Préstamos al día sin mora."
+              : `${count} equipo(s) con tiempo vencido clasificados En Mora.`,
         };
       });
       list.push(...mapped);
     } else {
       list.push(...INITIAL_FALLBACK_CRON_JOBS);
     }
-    return [...manualCronJobs, ...list];
+    const combined = [...manualCronJobs, ...list];
+
+    // Deduplicar ejecuciones repetidas para la misma fecha/minuto y resultado
+    const seen = new Set<string>();
+    const deduplicated: HumanCronExecution[] = [];
+    for (const job of combined) {
+      const key = `${job.executedAt}_${job.recordsProcessed}_${job.status}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduplicated.push(job);
+      }
+    }
+    return deduplicated;
   }, [jobsData, manualCronJobs]);
+
+  const visibleCronJobs = useMemo(() => {
+    return cronJobs.filter((job) => !hiddenCronIds.includes(job.id));
+  }, [cronJobs, hiddenCronIds]);
+
+  const handleHideCronJob = (id: string) => {
+    const next = Array.from(new Set([...hiddenCronIds, id]));
+    setHiddenCronIds(next);
+    try {
+      localStorage.setItem(STORAGE_KEY_HIDDEN_CRON_JOBS, JSON.stringify(next));
+    } catch {}
+  };
+
+  const handleRestoreAllCronJobs = () => {
+    setHiddenCronIds([]);
+    try {
+      localStorage.removeItem(STORAGE_KEY_HIDDEN_CRON_JOBS);
+    } catch {}
+  };
 
   // Detección automática de cambio de día (Day Rollover):
   // Si existen movimientos de días anteriores no consolidados, se compila su informe diario y se ocultan
@@ -486,26 +686,26 @@ export default function AuditPage() {
       await refetchLogs();
       broadcastSyncEvent("CRON_SYNC");
       broadcastSyncEvent("LOANS_SYNC");
-      setCronNotice("¡Robot CRON ejecutado exitosamente! Se verificaron todos los préstamos activos.");
+      setCronNotice("Robot CRON: Monitoreo ejecutado sin novedades.");
     } catch {
       // Simulación local
       const nowStr = new Date().toISOString().replace("T", " ").slice(0, 16);
       const newJob: HumanCronExecution = {
-        id: `JOB-${Date.now().toString().slice(-3)}`,
+        id: `JOB-${Date.now().toString().slice(-4)}`,
         jobName: "DailyOverdueDetectionJob",
         jobTitle: "Detección Diaria de Vencimientos",
         executedAt: nowStr,
         status: "SUCCESS",
         recordsProcessed: 1,
-        humanSummary: "Verificación manual: 1 préstamo con tiempo vencido fue clasificado como En Mora.",
+        humanSummary: "Revisión manual: 1 préstamo con tiempo vencido marcado En Mora.",
       };
       setManualCronJobs((prev) => [newJob, ...prev]);
       broadcastSyncEvent("CRON_SYNC");
       broadcastSyncEvent("LOANS_SYNC");
-      setCronNotice("¡Robot CRON ejecutado exitosamente! Préstamos verificados.");
+      setCronNotice("Robot CRON: Monitoreo ejecutado. 1 caso verificado.");
     } finally {
       setIsExecutingCron(false);
-      setTimeout(() => setCronNotice(null), 5000);
+      setTimeout(() => setCronNotice(null), 6000);
     }
   };
 
@@ -716,18 +916,16 @@ export default function AuditPage() {
     } catch {}
   };
 
-  // Requisito 3: Registros diarios filtrados por fecha al final de la página
+  // Requisito: Las 5 fechas de abajo sean exactamente de los últimos 5 días consecutivos
   const availableHistoryDates = useMemo(() => {
-    const datesSet = new Set<string>();
-    const today = new Date().toISOString().split("T")[0];
-    datesSet.add(today);
-    dailyReports.forEach((r) => datesSet.add(r.date));
-    logs.forEach((l) => {
-      const d = l.createdAt.slice(0, 10);
-      if (d) datesSet.add(d);
-    });
-    return Array.from(datesSet).sort().reverse();
-  }, [dailyReports, logs]);
+    const list: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(now.getTime() - i * 86400000);
+      list.push(d.toISOString().split("T")[0]);
+    }
+    return list;
+  }, []);
 
   const dayHistoryLogs = useMemo(() => {
     return logs.filter((l) => l.createdAt.slice(0, 10) === selectedHistoryDate);
@@ -952,11 +1150,20 @@ export default function AuditPage() {
         </div>
       )}
 
-      {/* Notificación de ejecución CRON */}
+      {/* Notificación de ejecución CRON más resumida y con botón para ocultar */}
       {cronNotice && (
-        <div className="rounded-2xl bg-emerald-50 border border-emerald-300 p-4 text-emerald-800 text-sm font-bold flex items-center gap-2.5 shadow-xs">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-          <span>{cronNotice}</span>
+        <div className="rounded-2xl bg-emerald-50 border border-emerald-300 p-3.5 text-emerald-800 text-xs sm:text-sm font-bold flex items-center justify-between gap-2.5 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+            <span>{cronNotice}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCronNotice(null)}
+            className="text-xs text-emerald-800/80 hover:text-emerald-950 font-bold px-2 py-1 rounded-lg hover:bg-emerald-100/70 cursor-pointer"
+          >
+            Ocultar
+          </button>
         </div>
       )}
 
@@ -1022,7 +1229,7 @@ export default function AuditPage() {
             }`}
           >
             <Bot className="h-4 w-4 text-amber-400" />
-            <span>Robot de Monitoreo CRON ({cronJobs.length})</span>
+            <span>Robot de Monitoreo CRON ({visibleCronJobs.length})</span>
           </button>
         </div>
 
@@ -1382,65 +1589,95 @@ export default function AuditPage() {
       {activeTab === "CRON" && (
         <div className="space-y-4">
           <div className="bg-white rounded-3xl border border-[#AFC8D0]/60 p-6 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-[#AFC8D0]/40 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#AFC8D0]/40 pb-3">
               <div>
                 <h3 className="font-title text-xl text-[#172B4D]">Ejecuciones Automáticas del Robot</h3>
                 <p className="text-xs text-[#172B4D]/60">Historial de revisiones nocturnas programadas</p>
               </div>
 
-              {isAdmin && (
-                <button
-                  type="button"
-                  disabled={isExecutingCron}
-                  onClick={handleTriggerCron}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  <Play className={`h-4 w-4 ${isExecutingCron ? "animate-spin" : ""}`} />
-                  <span>Probar Ejecución Inmediata</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {hiddenCronIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreAllCronJobs}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#1995AD]/10 text-[#1995AD] border border-[#1995AD]/30 hover:bg-[#1995AD] hover:text-white transition-all cursor-pointer shadow-2xs"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span>Restaurar ocultos ({hiddenCronIds.length})</span>
+                  </button>
+                )}
+
+                {isAdmin && (
+                  <button
+                    type="button"
+                    disabled={isExecutingCron}
+                    onClick={handleTriggerCron}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <Play className={`h-4 w-4 ${isExecutingCron ? "animate-spin" : ""}`} />
+                    <span>Probar Ejecución Inmediata</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
-              {cronJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="p-5 rounded-2xl bg-[#F1F1F2]/60 border border-[#AFC8D0]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#1995AD] transition-all"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2.5">
-                      <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Revisión Exitosa
-                      </span>
-                      <span className="font-mono text-xs text-[#1995AD] font-bold">{job.id}</span>
-                      <span className="text-xs text-[#172B4D]/60 flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> {job.executedAt}
-                      </span>
+              {visibleCronJobs.length === 0 ? (
+                <div className="py-10 text-center text-xs text-[#172B4D]/60 font-medium bg-[#F1F1F2]/40 rounded-2xl border border-dashed border-[#AFC8D0]/50">
+                  No hay ejecuciones del robot visibles. (Todas están ocultas o filtradas).
+                </div>
+              ) : (
+                visibleCronJobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="p-5 rounded-2xl bg-[#F1F1F2]/60 border border-[#AFC8D0]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-[#1995AD] transition-all"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Revisión Exitosa
+                        </span>
+                        <span className="font-mono text-xs text-[#1995AD] font-bold">{job.id}</span>
+                        <span className="text-xs text-[#172B4D]/60 flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> {job.executedAt}
+                        </span>
+                      </div>
+
+                      <h4 className="font-title text-base text-[#172B4D]">{job.jobTitle}</h4>
+                      <p className="text-xs sm:text-sm text-[#172B4D]/80 font-medium">
+                        {job.humanSummary}
+                      </p>
                     </div>
 
-                    <h4 className="font-title text-base text-[#172B4D]">{job.jobTitle}</h4>
-                    <p className="text-xs sm:text-sm text-[#172B4D]/80 font-medium">
-                      {job.humanSummary}
-                    </p>
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <div className="text-right shrink-0 bg-white px-4 py-2.5 rounded-xl border border-[#AFC8D0]/50">
+                        <span className="text-[11px] font-bold text-[#172B4D]/60 uppercase block">
+                          Casos Detectados
+                        </span>
+                        <span className="text-2xl font-black text-[#172B4D]">
+                          {job.recordsProcessed}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleHideCronJob(job.id)}
+                        title="Ocultar esta ejecución"
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-[#172B4D]/70 hover:text-red-700 hover:bg-red-50 border border-[#AFC8D0]/50 hover:border-red-300 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <EyeOff className="h-3.5 w-3.5 text-red-600" />
+                        <span>Ocultar</span>
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="text-right shrink-0 bg-white px-4 py-2.5 rounded-xl border border-[#AFC8D0]/50">
-                    <span className="text-[11px] font-bold text-[#172B4D]/60 uppercase block">
-                      Casos Detectados
-                    </span>
-                    <span className="text-2xl font-black text-[#172B4D]">
-                      {job.recordsProcessed}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* =========================================================================
-          REQUISITO 3: SECCIÓN INFERIOR — HISTORIAL DE REGISTROS DIARIOS FILTRADOS POR FECHA
+          REQUISITO 3: SECCIÓN INFERIOR — HISTORIAL DE REGISTRO DIARIO FILTRADO POR FECHA
          ========================================================================= */}
       <div className="pt-6 border-t-2 border-[#AFC8D0]/40 space-y-6">
         <div className="bg-white rounded-3xl border-2 border-[#1995AD]/40 p-6 sm:p-7 shadow-md space-y-6">
@@ -1452,7 +1689,7 @@ export default function AuditPage() {
               </div>
               <div>
                 <h2 className="font-title text-2xl text-[#172B4D] tracking-tight">
-                  Historial de Registros Diarios e Informes Consolidados
+                  Historial de Registro Diario
                 </h2>
                 <p className="text-xs sm:text-sm text-[#172B4D]/70">
                   Consulta el informe de bitácora resumido y los movimientos de cualquier fecha seleccionada
