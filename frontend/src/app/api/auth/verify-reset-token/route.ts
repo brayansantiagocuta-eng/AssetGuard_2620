@@ -23,9 +23,7 @@ export async function GET(req: NextRequest) {
     const classesDir = path.join(projectRoot, "backend", "target", "classes");
     const mailLibsDir = path.join(projectRoot, "backend", "target", "mail-libs", "*");
 
-    const defaultJavaPath =
-      "C:\\Users\\maria\\AppData\\Local\\Programs\\Eclipse Adoptium\\jdk-25.0.3.9-hotspot\\bin\\java.exe";
-    const javaBin = fs.existsSync(defaultJavaPath) ? defaultJavaPath : "java";
+    const javaBin = process.env.JAVA_BIN || (process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, "bin", "java") : "java");
 
     const { stdout } = await execFileAsync(
       javaBin,
