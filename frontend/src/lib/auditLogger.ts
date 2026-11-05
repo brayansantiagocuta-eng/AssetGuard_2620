@@ -1,3 +1,5 @@
+import { broadcastSyncEvent } from "./crossTabSync";
+
 export interface AuditLogData {
   id?: string;
   userName: string;
@@ -40,6 +42,7 @@ export function recordAuditEvent(event: AuditLogData): void {
 
     // Despachar evento para que otras pestañas o componentes se sincronicen
     window.dispatchEvent(new CustomEvent("assetguard:audit-updated", { detail: newEntry }));
+    broadcastSyncEvent("AUDIT_SYNC", newEntry);
   } catch (err) {
     console.error("Error al registrar evento de auditoría:", err);
   }

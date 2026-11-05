@@ -15,6 +15,7 @@ import {
 } from "@/lib/graphql/mutations";
 import { recordAuditEvent } from "@/lib/auditLogger";
 import { exportInventoryToStyledExcel } from "@/lib/excelExportHelper";
+import { subscribeToSync, broadcastSyncEvent } from "@/lib/crossTabSync";
 import {
   Search,
   Plus,
@@ -317,23 +318,6 @@ export default function InventoryPage() {
   const { role, user } = useAuth();
   const [assets, setAssets] = useState<AssetItem[]>(INITIAL_ASSETS);
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_REGISTERED);
-      if (saved) {
-        const custom: AssetItem[] = JSON.parse(saved);
-        if (Array.isArray(custom) && custom.length > 0) {
-          const customSerials = new Set(custom.map((x) => x.serialNumber.toUpperCase()));
-          setAssets([
-            ...custom,
-            ...INITIAL_ASSETS.filter((a) => !customSerials.has(a.serialNumber.toUpperCase())),
-          ]);
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [locationFilter, setLocationFilter] = useState<string>("ALL");
@@ -464,6 +448,42 @@ export default function InventoryPage() {
   const [createLoanRequestMutation] = useMutation(CREATE_LOAN_REQUEST_MUTATION);
   const [updateAssetStatusMutation] = useMutation(UPDATE_ASSET_STATUS_MUTATION);
 
+  useEffect(() => {
+    const reloadLocalAssets = () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_REGISTERED);
+        if (saved) {
+          const custom: AssetItem[] = JSON.parse(saved);
+          if (Array.isArray(custom) && custom.length > 0) {
+            const customSerials = new Set(custom.map((x) => x.serialNumber.toUpperCase()));
+            setAssets([
+              ...custom,
+              ...INITIAL_ASSETS.filter((a) => !customSerials.has(a.serialNumber.toUpperCase())),
+            ]);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    reloadLocalAssets();
+
+    const unsubInventory = subscribeToSync("INVENTORY_SYNC", () => {
+      reloadLocalAssets();
+      if (refetch) refetch();
+    });
+
+    const unsubLoans = subscribeToSync("LOANS_SYNC", () => {
+      if (refetch) refetch();
+    });
+
+    return () => {
+      unsubInventory();
+      unsubLoans();
+    };
+  }, [refetch]);
+
   const handleUpdateStatusSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAssetForStatusChange) return;
@@ -484,6 +504,7 @@ export default function InventoryPage() {
       setNotice(`Estado del equipo ${selectedAssetForStatusChange.model} (${selectedAssetForStatusChange.serialNumber}) actualizado a ${newStatusValue}.`);
       setSelectedAssetForStatusChange(null);
       setStatusChangeNotes("");
+      broadcastSyncEvent("INVENTORY_SYNC");
       if (refetch) refetch();
     } catch {
       // Fallback local update
@@ -492,6 +513,7 @@ export default function InventoryPage() {
           a.id === selectedAssetForStatusChange.id ? { ...a, status: newStatusValue } : a
         )
       );
+      broadcastSyncEvent("INVENTORY_SYNC");
       setNotice(`Estado actualizado localmente para ${selectedAssetForStatusChange.model}.`);
       setSelectedAssetForStatusChange(null);
       setStatusChangeNotes("");
@@ -1088,6 +1110,7 @@ export default function InventoryPage() {
       ...prev.filter((x) => x.serialNumber.toUpperCase() !== created.serialNumber.toUpperCase()),
     ]);
     setIsNewAssetOpen(false);
+    broadcastSyncEvent("INVENTORY_SYNC");
     setNotice(`Equipo "${finalModelName}" (${newSerial}) registrado y guardado exitosamente en el inventario.`);
   };
 
@@ -1106,6 +1129,7 @@ export default function InventoryPage() {
         const payload = (res.data as any)?.bulkUploadAssetsFile;
         if (payload?.success) {
           await refetch();
+          broadcastSyncEvent("INVENTORY_SYNC");
           setNotice(`${payload.insertedCount} equipos importados correctamente.`);
           setIsBulkModalOpen(false);
           return;
@@ -1299,6 +1323,8 @@ export default function InventoryPage() {
     } catch {
       // fallback
     }
+    broadcastSyncEvent("LOANS_SYNC");
+    broadcastSyncEvent("INVENTORY_SYNC");
     setNotice(`Solicitud enviada para ${selectedAssetForRequest.model}. El código QR ha sido renovado exitosamente.`);
     setSelectedAssetForRequest(null);
     setRequestMotive("");

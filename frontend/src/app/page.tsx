@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@apollo/client/react";
 import { useAuth } from "@/context/AuthContext";
 import { GET_FINANCIAL_SUMMARY_QUERY } from "@/lib/graphql/queries";
+import { subscribeToSync } from "@/lib/crossTabSync";
 import {
   Layers,
   Package,
@@ -41,23 +42,35 @@ export default function HomePage() {
   const [adminNotices, setAdminNotices] = useState<Array<{ id: string; message: string; createdAt: string }>>([]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("assetguard_local_loans");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) setLocalLoans(parsed);
-        }
-      } catch {}
+    const reloadDashboardState = () => {
+      if (typeof window !== "undefined") {
+        try {
+          const saved = localStorage.getItem("assetguard_local_loans");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) setLocalLoans(parsed);
+          }
+        } catch {}
 
-      try {
-        const savedNotices = localStorage.getItem("assetguard_admin_notifications");
-        if (savedNotices) {
-          const parsed = JSON.parse(savedNotices);
-          if (Array.isArray(parsed)) setAdminNotices(parsed);
-        }
-      } catch {}
-    }
+        try {
+          const savedNotices = localStorage.getItem("assetguard_admin_notifications");
+          if (savedNotices) {
+            const parsed = JSON.parse(savedNotices);
+            if (Array.isArray(parsed)) setAdminNotices(parsed);
+          }
+        } catch {}
+      }
+    };
+
+    reloadDashboardState();
+
+    const unsubLoans = subscribeToSync("LOANS_SYNC", reloadDashboardState);
+    const unsubInv = subscribeToSync("INVENTORY_SYNC", reloadDashboardState);
+
+    return () => {
+      unsubLoans();
+      unsubInv();
+    };
   }, []);
 
   const dismissAdminNotice = (id: string) => {

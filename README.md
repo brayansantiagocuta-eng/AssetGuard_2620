@@ -48,6 +48,7 @@ Flyway aplica las migraciones de `backend/src/main/resources/db/migration` en el
 - `V1__initial_schema.sql`: tablas, indices y semillas (roles, usuarios, categorias, ubicaciones y activos).
 - `V2__authentication_sessions.sql`: sesiones revocables en base de datos.
 - `V3__repair_auth_sessions_and_seed_passwords.sql`: restaura la clave foranea `auth_sessions.user_id`, corrige los hashes de las cuentas semilla e invalida las sesiones anteriores.
+- `V4__password_reset_tokens.sql`: tokens de recuperacion de contrasena de un solo uso, con `user_id`, `email`, `expires_at`, `used` y `created_at`.
 
 `database/assetguard_schema_and_seeds.sql` es el mismo esquema para ejecucion manual. Es idempotente (`CREATE TABLE IF NOT EXISTS`, `ON CONFLICT DO NOTHING`) y **no contiene `DROP`, `TRUNCATE` ni `DELETE`**: se puede ejecutar sobre una base con datos sin perderlos.
 
@@ -70,9 +71,12 @@ Si `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` estan definidos, al arra
 - GraphQL: `POST /graphql` (contrato en `backend/src/main/resources/graphql/schema.graphqls`).
 - GraphiQL: `GET /graphiql` (se desactiva con `GRAPHIQL_ENABLED=false` en produccion).
 - Autenticacion REST: `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout` y `GET /api/auth/database`.
+- Recuperacion de contrasena: `POST /api/auth/password-recovery`, `GET /api/auth/verify-reset-token` y `POST /api/auth/reset-password`.
 - La gestion de usuarios (`users`, `userById`, `createUser`, `updateUser`) y el resto de operaciones del sistema se exponen por GraphQL con control de roles ADMIN, INSPECTOR y TECHNICIAN.
 
 La sesion viaja en una cookie `HttpOnly` con `SameSite=Strict`; el backend valida el origen de las peticiones que cambian estado y limita los intentos fallidos de inicio de sesion (5 por correo e IP cada 10 minutos). `GET /api/auth/database` requiere una sesion autenticada.
+
+La recuperacion de contrasena es autoservicio para todos los usuarios: el sistema valida el correo, genera un enlace de un solo uso con vigencia de 30 minutos, registra el token en `password_reset_tokens`, invalida tokens anteriores y envia el enlace al correo registrado. El flujo documentado incluye la notificacion a `admin@globalnet.com` cuando el cambio se completa.
 
 La tarea `DAILY_OVERDUE_JOB` se ejecuta a la medianoche de Bogota y migra a `OVERDUE` los prestamos vencidos; cada ejecucion queda registrada en `job_executions`. Tambien puede dispararse manualmente con la mutacion `runDailyOverdueJob` (solo ADMIN).
 

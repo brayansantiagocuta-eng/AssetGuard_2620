@@ -8,6 +8,7 @@ import { CustomSelect, SelectOption } from "@/components/ui/CustomSelect";
 import { GET_USERS_QUERY } from "@/lib/graphql/queries";
 import { CREATE_USER_MUTATION, UPDATE_USER_MUTATION } from "@/lib/graphql/mutations";
 import { recordAuditEvent } from "@/lib/auditLogger";
+import { subscribeToSync, broadcastSyncEvent } from "@/lib/crossTabSync";
 import {
   Users,
   UserPlus,
@@ -125,16 +126,29 @@ export default function UsersManagementPage() {
   const [users, setUsers] = useState<UserRecord[]>(INITIAL_FALLBACK_USERS);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(USERS_CACHE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= INITIAL_FALLBACK_USERS.length) {
-          setUsers(parsed);
+    const reloadLocalUsers = () => {
+      try {
+        const saved = localStorage.getItem(USERS_CACHE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length >= INITIAL_FALLBACK_USERS.length) {
+            setUsers(parsed);
+          }
         }
-      }
-    } catch {}
-  }, []);
+      } catch {}
+      if (refetchUsers) void refetchUsers();
+    };
+
+    reloadLocalUsers();
+
+    const unsubUsers = subscribeToSync("USERS_SYNC", () => {
+      reloadLocalUsers();
+    });
+
+    return () => {
+      unsubUsers();
+    };
+  }, [refetchUsers]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -228,6 +242,7 @@ export default function UsersManagementPage() {
         };
         setUsers((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
         void refetchUsers();
+        broadcastSyncEvent("USERS_SYNC");
         recordAuditEvent({
           userName: "Administrador",
           userRole: "Administrador",
@@ -262,6 +277,7 @@ export default function UsersManagementPage() {
     } catch {}
 
     setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, role: nextRole, status: nextStatus } : u)));
+    broadcastSyncEvent("USERS_SYNC");
     recordAuditEvent({
       userName: "Administrador",
       userRole: "Administrador",

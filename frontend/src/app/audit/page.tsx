@@ -7,6 +7,7 @@ import { GET_AUDIT_LOGS_QUERY, GET_JOB_EXECUTIONS_QUERY } from "@/lib/graphql/qu
 import { RUN_DAILY_OVERDUE_JOB_MUTATION } from "@/lib/graphql/mutations";
 import { getLocalAuditEvents } from "@/lib/auditLogger";
 import { exportAuditToStyledExcel } from "@/lib/excelExportHelper";
+import { subscribeToSync, broadcastSyncEvent } from "@/lib/crossTabSync";
 import {
   FileText,
   Play,
@@ -297,41 +298,7 @@ export default function AuditPage() {
   const [showConfirmExport, setShowConfirmExport] = useState(false);
   const [showConfirmCloseDay, setShowConfirmCloseDay] = useState(false);
 
-  // Eventos de auditoría locales persistidos (generados en tiempo real por el sistema)
-  const [localAuditEvents, setLocalAuditEvents] = useState<HumanAuditEntry[]>([]);
-
-  useEffect(() => {
-    const loadEvents = () => {
-      const items = getLocalAuditEvents();
-      if (items.length > 0) {
-        setLocalAuditEvents(
-          items.map((it) => ({
-            id: it.id || `AUD-${Math.random()}`,
-            userName: it.userName,
-            userRole:
-              it.userRole === "ADMIN"
-                ? "Administrador"
-                : it.userRole === "INSPECTOR"
-                ? "Inspector"
-                : it.userRole === "TECHNICIAN"
-                ? "Técnico"
-                : it.userRole || "Usuario",
-            actionCode: it.actionCode,
-            actionTitle: it.actionTitle,
-            actionDescription: it.actionDescription,
-            actionCategory: it.actionCategory,
-            entityName: it.entityName,
-            ipAddress: it.ipAddress || "192.168.10.22",
-            createdAt: it.createdAt || new Date().toISOString().replace("T", " ").slice(0, 16),
-          }))
-        );
-      }
-    };
-    loadEvents();
-    window.addEventListener("assetguard:audit-updated", loadEvents);
-    return () => window.removeEventListener("assetguard:audit-updated", loadEvents);
-  }, []);
-
+  // Queries de GraphQL
   const { data: logsData, refetch: refetchLogs } = useQuery<{
     auditLogs?: {
       items?: Array<{
@@ -364,6 +331,56 @@ export default function AuditPage() {
   });
 
   const [runCronMutation] = useMutation(RUN_DAILY_OVERDUE_JOB_MUTATION);
+
+  // Eventos de auditoría locales persistidos (generados en tiempo real por el sistema)
+  const [localAuditEvents, setLocalAuditEvents] = useState<HumanAuditEntry[]>([]);
+
+  useEffect(() => {
+    const loadEvents = () => {
+      const items = getLocalAuditEvents();
+      if (items.length > 0) {
+        setLocalAuditEvents(
+          items.map((it) => ({
+            id: it.id || `AUD-${Math.random()}`,
+            userName: it.userName,
+            userRole:
+              it.userRole === "ADMIN"
+                ? "Administrador"
+                : it.userRole === "INSPECTOR"
+                ? "Inspector"
+                : it.userRole === "TECHNICIAN"
+                ? "Técnico"
+                : it.userRole || "Usuario",
+            actionCode: it.actionCode,
+            actionTitle: it.actionTitle,
+            actionDescription: it.actionDescription,
+            actionCategory: it.actionCategory,
+            entityName: it.entityName,
+            ipAddress: it.ipAddress || "192.168.10.22",
+            createdAt: it.createdAt || new Date().toISOString().replace("T", " ").slice(0, 16),
+          }))
+        );
+      }
+    };
+    loadEvents();
+    window.addEventListener("assetguard:audit-updated", loadEvents);
+
+    const unsubAudit = subscribeToSync("AUDIT_SYNC", () => {
+      loadEvents();
+      if (refetchLogs) refetchLogs();
+    });
+    const unsubCron = subscribeToSync("CRON_SYNC", () => {
+      loadEvents();
+      if (refetchJobs) refetchJobs();
+      if (refetchLogs) refetchLogs();
+    });
+
+    return () => {
+      window.removeEventListener("assetguard:audit-updated", loadEvents);
+      unsubAudit();
+      unsubCron();
+    };
+  }, [refetchLogs, refetchJobs]);
 
   // Mapear logs de GraphQL + eventos locales + registros iniciales del día a lenguaje 100% entendible
   const logs = useMemo<HumanAuditEntry[]>(() => {
@@ -467,6 +484,8 @@ export default function AuditPage() {
       await runCronMutation();
       await refetchJobs();
       await refetchLogs();
+      broadcastSyncEvent("CRON_SYNC");
+      broadcastSyncEvent("LOANS_SYNC");
       setCronNotice("¡Robot CRON ejecutado exitosamente! Se verificaron todos los préstamos activos.");
     } catch {
       // Simulación local
@@ -481,6 +500,8 @@ export default function AuditPage() {
         humanSummary: "Verificación manual: 1 préstamo con tiempo vencido fue clasificado como En Mora.",
       };
       setManualCronJobs((prev) => [newJob, ...prev]);
+      broadcastSyncEvent("CRON_SYNC");
+      broadcastSyncEvent("LOANS_SYNC");
       setCronNotice("¡Robot CRON ejecutado exitosamente! Préstamos verificados.");
     } finally {
       setIsExecutingCron(false);

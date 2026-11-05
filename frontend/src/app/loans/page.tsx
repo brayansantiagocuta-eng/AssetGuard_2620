@@ -18,6 +18,7 @@ import {
   RETURN_LOAN_MUTATION,
 } from "@/lib/graphql/mutations";
 import { recordAuditEvent } from "@/lib/auditLogger";
+import { subscribeToSync, broadcastSyncEvent } from "@/lib/crossTabSync";
 import {
   KeyRound,
   ClipboardList,
@@ -158,12 +159,51 @@ export default function LoansPage() {
     } catch {}
   }, []);
 
-  const saveLoansState = (items: UnifiedLoanItem[]) => {
+  const saveLoansState = (items: UnifiedLoanItem[], shouldBroadcast: boolean = true) => {
     setLocalLoans(items);
     try {
       localStorage.setItem(STORAGE_KEY_LOANS, JSON.stringify(items));
     } catch {}
+    if (shouldBroadcast) {
+      broadcastSyncEvent("LOANS_SYNC", items);
+    }
   };
+
+  // Sincronización en tiempo real entre pestañas y ventanas
+  useEffect(() => {
+    const unsubLoans = subscribeToSync("LOANS_SYNC", (incomingItems) => {
+      if (Array.isArray(incomingItems) && incomingItems.length > 0) {
+        setLocalLoans(incomingItems);
+      } else {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY_LOANS);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) setLocalLoans(parsed);
+          }
+        } catch {}
+      }
+      if (refetchRequests) refetchRequests();
+      if (refetchHistory) refetchHistory();
+    });
+
+    const unsubInventory = subscribeToSync("INVENTORY_SYNC", () => {
+      if (refetchRequests) refetchRequests();
+      if (refetchHistory) refetchHistory();
+    });
+
+    const unsubCron = subscribeToSync("CRON_SYNC", () => {
+      if (refetchRequests) refetchRequests();
+      if (refetchHistory) refetchHistory();
+    });
+
+    return () => {
+      unsubLoans();
+      unsubInventory();
+      unsubCron();
+    };
+  }, [refetchRequests, refetchHistory]);
+
   const [filterStatus, setFilterStatus] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isRefreshingLoans, setIsRefreshingLoans] = useState<boolean>(false);
@@ -562,6 +602,7 @@ export default function LoansPage() {
         l.id === selectedValidationLoan.id ? { ...l, status: "ACTIVE" as const } : l
       );
       saveLoansState(updated);
+      broadcastSyncEvent("INVENTORY_SYNC");
       recordAuditEvent({
         userName: user?.fullName || "Inspector de Bodega",
         userRole: role || "INSPECTOR",
@@ -585,6 +626,7 @@ export default function LoansPage() {
           l.id === selectedValidationLoan.id ? { ...l, status: "ACTIVE" as const } : l
         );
         saveLoansState(updated);
+        broadcastSyncEvent("INVENTORY_SYNC");
         recordAuditEvent({
           userName: user?.fullName || "Inspector de Bodega",
           userRole: role || "INSPECTOR",
@@ -628,6 +670,7 @@ export default function LoansPage() {
       l.id === selectedReturnLoan.id ? { ...l, status: "RETURNED" as const } : l
     );
     saveLoansState(updated);
+    broadcastSyncEvent("INVENTORY_SYNC");
     recordAuditEvent({
       userName: user?.fullName || "Inspector de Bodega",
       userRole: role || "INSPECTOR",
