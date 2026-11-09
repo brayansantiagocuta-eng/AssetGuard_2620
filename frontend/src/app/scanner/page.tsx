@@ -13,14 +13,11 @@ import {
   Package,
   Upload,
   FileImage,
-  FileText,
   History,
   Trash2,
   Clock,
   MapPin,
-  ExternalLink,
   ShieldCheck,
-  Check,
   Layers,
   Download,
 } from "lucide-react";
@@ -430,6 +427,7 @@ export default function ScannerPage() {
     } catch {
       // ignore
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Guardar en el historial: solo se guardan 5 fichas de los 5 equipos más usados/escaneados
@@ -579,7 +577,7 @@ export default function ScannerPage() {
           }
         );
         setCameraError(null);
-      } catch (err: any) {
+      } catch {
         setCameraError(
           "No se pudo acceder a la cámara. Verifica los permisos del navegador o usa la carga de imágenes / manual."
         );
@@ -615,6 +613,7 @@ export default function ScannerPage() {
         }
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isScanning]);
 
   // Manejo de eventos de Arrastrar y Soltar (Drag & Drop)
@@ -763,7 +762,7 @@ export default function ScannerPage() {
       setScannerError(
         `No se detectó un código QR legible en la imagen "${file.name}". Verifica que la imagen sea nítida o ingresa el serial manualmente.`
       );
-    } catch (err: any) {
+    } catch {
       if (detectedFromFilename) {
         lookupAsset(detectedFromFilename, "ARCHIVO");
         setFileSuccessNotice(`Equipo identificado por archivo: ${detectedFromFilename}`);
@@ -1180,6 +1179,7 @@ export default function ScannerPage() {
               {/* Bloque Oficial de Generación y Descarga de Etiqueta QR */}
               <div className="bg-[#F1F1F2]/80 border-2 border-[#1995AD]/40 p-4 rounded-2xl flex flex-col sm:flex-row items-center gap-4 shadow-xs">
                 {activeQrDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={activeQrDataUrl}
                     alt={`Código QR ${assetDetails.serial}`}

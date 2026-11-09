@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useAuth } from "@/context/AuthContext";
 import { CustomSelect, SelectOption } from "@/components/ui/CustomSelect";
@@ -116,7 +116,6 @@ export default function LoansPage() {
 
   const {
     data: requestsData,
-    loading: loadingRequests,
     refetch: refetchRequests,
   } = useQuery<any>(GET_LOAN_REQUESTS_QUERY, {
     variables: { pagination: { page: 0, size: 50 } },
@@ -125,7 +124,6 @@ export default function LoansPage() {
 
   const {
     data: historyData,
-    loading: loadingHistory,
     refetch: refetchHistory,
   } = useQuery<any>(GET_MY_LOAN_HISTORY_QUERY, {
     variables: { pagination: { page: 0, size: 50 } },
@@ -237,8 +235,6 @@ export default function LoansPage() {
   const [selectedOtpLoan, setSelectedOtpLoan] = useState<UnifiedLoanItem | null>(null);
   const [selectedValidationLoan, setSelectedValidationLoan] = useState<UnifiedLoanItem | null>(null);
   const [selectedReturnLoan, setSelectedReturnLoan] = useState<UnifiedLoanItem | null>(null);
-
-  const loanRequestModalBodyRef = useRef<HTMLDivElement>(null);
 
   // Bloqueo de scroll de fondo mientras un modal de préstamos esté abierto
   useEffect(() => {
@@ -501,7 +497,7 @@ export default function LoansPage() {
 
       if (refetchRequests) refetchRequests();
       if (refetchHistory) refetchHistory();
-    } catch (err: any) {
+    } catch {
       // Solicitud persiste en localLoans
     }
   };
@@ -863,7 +859,6 @@ export default function LoansPage() {
             const isApproved = item.status === "APPROVED";
             const isActive = item.status === "ACTIVE";
             const isOverdue = item.status === "OVERDUE";
-            const isReturned = item.status === "RETURNED";
             const isRejected = item.status === "REJECTED";
 
             return (

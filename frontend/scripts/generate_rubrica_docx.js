@@ -1,5 +1,4 @@
 const fs = require("node:fs");
-const path = require("node:path");
 const {
   Document,
   Packer,
@@ -10,14 +9,10 @@ const {
   TableCell,
   WidthType,
   AlignmentType,
-  HeadingLevel,
-  BorderStyle,
 } = require("C:/Users/maria/OneDrive/Escritorio/AssetGuard_2620/frontend/node_modules/docx");
 
 const primaryColor = "1995AD";
 const secondaryColor = "172B4D";
-const accentColor = "A1D6E2";
-const lightBg = "F1F1F2";
 
 function createHeaderCell(text, widthPercent) {
   return new TableCell({

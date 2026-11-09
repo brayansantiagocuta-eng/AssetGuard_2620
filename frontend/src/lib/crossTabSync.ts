@@ -11,7 +11,7 @@ export type SyncEventType =
   | "STORAGE_SNAPSHOT_RES"
   | "DASHBOARD_SYNC";
 
-export interface SyncMessage<T = any> {
+export interface SyncMessage<T = unknown> {
   type: SyncEventType;
   payload?: T;
   sourceTabId: string;
@@ -60,7 +60,7 @@ export function getSyncChannel(): BroadcastChannel | null {
 /**
  * Emite un evento a todas las demás pestañas abiertas en tiempo real.
  */
-export function broadcastSyncEvent<T = any>(type: SyncEventType, payload?: T): void {
+export function broadcastSyncEvent<T = unknown>(type: SyncEventType, payload?: T): void {
   const channel = getSyncChannel();
   const message: SyncMessage<T> = {
     type,
@@ -93,16 +93,16 @@ export function broadcastSyncEvent<T = any>(type: SyncEventType, payload?: T): v
  * Suscribe un componente a eventos emitidos por otras pestañas.
  * Retorna la función para cancelar la suscripción (clean-up en useEffect).
  */
-export function subscribeToSync(
+export function subscribeToSync<T = unknown>(
   type: SyncEventType | "*",
-  callback: (payload: any, fullMessage: SyncMessage) => void
+  callback: (payload: T | undefined, fullMessage: SyncMessage<T>) => void
 ): () => void {
   const channel = getSyncChannel();
   if (!channel) return () => {};
 
   const handler = (msg: SyncMessage) => {
     if (type === "*" || msg.type === type) {
-      callback(msg.payload, msg);
+      callback(msg.payload as T | undefined, msg as SyncMessage<T>);
     }
   };
 

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
-import fs from "fs";
 
 const execFileAsync = promisify(execFile);
 
@@ -55,7 +54,7 @@ export async function GET(req: NextRequest) {
       },
       { status: 403 }
     );
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
       {
         valid: false,

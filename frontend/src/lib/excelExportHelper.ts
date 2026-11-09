@@ -119,7 +119,6 @@ export function exportInventoryToStyledExcel(
   let totalEV = 0;
   let countAvailable = 0;
   let countOnLoan = 0;
-  let countMaintenance = 0;
   let sumUsageCycles = 0;
   let sumMaxUsageCycles = 0;
   let loanedBookValue = 0;
@@ -136,7 +135,7 @@ export function exportInventoryToStyledExcel(
     else if (a.status === "ON_LOAN") {
       countOnLoan++;
       loanedBookValue += dep.bookValue;
-    } else if (a.status === "MAINTENANCE") countMaintenance++;
+    }
   });
 
   const fleetWearPercent =

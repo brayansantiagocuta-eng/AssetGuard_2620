@@ -66,7 +66,7 @@ function ResetPasswordContent() {
               "El enlace de recuperación es inválido, ya fue utilizado o ha expirado (validez máxima de 30 minutos). Por favor solicita uno nuevo desde el inicio de sesión."
           );
         }
-      } catch (err) {
+      } catch {
         if (!isSubscribed) return;
         setTokenStatus("INVALID");
         setTokenError("No se pudo verificar la validez del enlace con el servidor de seguridad.");

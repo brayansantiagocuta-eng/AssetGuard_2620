@@ -15,12 +15,10 @@ import {
   EyeOff,
   Copy,
   Check,
-  KeyRound,
   X,
 } from "lucide-react";
 
 const ADMIN_EMAIL = "valesotelo.0806@gmail.com";
-const ALLOWED_PWD_REGEX = /^[a-zA-Z0-9@#$*_!%&\-]*$/;
 const TAB_EMAIL_KEY = "assetguard_tab_email";
 const TAB_PWD_KEY = "assetguard_tab_pwd";
 const TAB_REMEMBER_KEY = "assetguard_tab_remember";
@@ -80,15 +78,6 @@ const validateEmail = (val: string): string[] => {
     errors.push("Falta completar el dominio después de '@' (ej: @globalnet.com).");
   }
   return errors;
-};
-
-const validatePasswordRecovery = (pwd: string, confirm: string): string | null => {
-  if (pwd.length < 6 || pwd.length > 20) return "La contraseña debe tener entre 6 y 20 caracteres.";
-  if (!ALLOWED_PWD_REGEX.test(pwd)) return "Solo se permiten letras, números y símbolos (@, #, $, *, _, -).";
-  if (!/[A-Z]/.test(pwd) || !/[a-z]/.test(pwd) || !/[0-9]/.test(pwd) || !/[@#$*_!%&\-]/.test(pwd)) {
-    return "La contraseña debe combinar mayúsculas (A-Z), minúsculas (a-z), números (0-9) y símbolos (@, #, $, *, _, -).";
-  }
-  return pwd !== confirm ? "Las contraseñas no coinciden." : null;
 };
 
 export default function LoginPage() {

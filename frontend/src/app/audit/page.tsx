@@ -25,7 +25,6 @@ import {
   FileSpreadsheet,
   History,
   RotateCcw,
-  Eye,
   EyeOff,
   ChevronDown,
   ChevronUp,
@@ -904,15 +903,6 @@ export default function AuditPage() {
     }
     try {
       localStorage.setItem(STORAGE_KEY_HIDDEN_LOGS, JSON.stringify(nextHidden));
-    } catch {}
-  };
-
-  const handleRestoreAllHidden = () => {
-    setHiddenLogIds([]);
-    setSelectedHiddenIds([]);
-    setIsHiddenPanelOpen(false);
-    try {
-      localStorage.removeItem(STORAGE_KEY_HIDDEN_LOGS);
     } catch {}
   };
 

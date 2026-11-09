@@ -7,7 +7,6 @@ import { useAuth } from "@/context/AuthContext";
 import { GET_FINANCIAL_SUMMARY_QUERY } from "@/lib/graphql/queries";
 import { subscribeToSync } from "@/lib/crossTabSync";
 import {
-  Layers,
   Package,
   ArrowLeftRight,
   AlertTriangle,
@@ -15,9 +14,6 @@ import {
   CheckCircle2,
   Clock,
   KeyRound,
-  QrCode,
-  ShieldCheck,
-  Send,
   X,
   ExternalLink,
   ChevronRight,
@@ -93,15 +89,6 @@ export default function HomePage() {
   const valueAtRisk = summary?.totalValueAtRisk
     ? `$${Number(summary.totalValueAtRisk).toLocaleString("en-US")}`
     : "$21,200";
-
-  const roleLabel =
-    role === "ADMIN"
-      ? "Administradora"
-      : role === "INSPECTOR"
-      ? "Inspector de Bodega"
-      : role === "TECHNICIAN"
-      ? "Técnico Especialista de Campo"
-      : "Usuario";
 
   // ==========================================
   // VISTA 1: TÉCNICO DE CAMPO (HU Técnicas)

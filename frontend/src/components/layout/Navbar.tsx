@@ -96,6 +96,7 @@ export function Navbar() {
   const { user, role, logout } = useAuth();
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const [showConfirmLogout, setShowConfirmLogout] = useState<boolean>(false);
+  const clickCountRef = useRef(0);
 
   // Estado para la expansión radial de color al dar clic en una sección
   const [spreadEffect, setSpreadEffect] = useState<{
@@ -125,8 +126,9 @@ export function Navbar() {
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
+    clickCountRef.current += 1;
     setSpreadEffect({
-      id: Date.now(),
+      id: clickCountRef.current,
       x: centerX,
       y: centerY,
       color: item.spreadColor,
