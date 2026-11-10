@@ -125,6 +125,11 @@ public class UserService {
 
         String newRole = input.role() == null ? current.role() : input.role().name();
         String newStatus = input.status() == null ? current.status() : input.status().name();
+
+        if ("ADMIN".equals(current.role()) && !"ADMIN".equals(newRole)) {
+            throw ApiException.conflict("Un Administrador no puede cambiar su rol.");
+        }
+
         boolean removesActiveAdministrator = "ADMIN".equals(current.role())
                 && "ACTIVE".equals(current.status())
                 && (!"ADMIN".equals(newRole) || !"ACTIVE".equals(newStatus));

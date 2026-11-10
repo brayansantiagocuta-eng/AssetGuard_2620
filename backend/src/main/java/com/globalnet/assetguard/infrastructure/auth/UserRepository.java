@@ -44,9 +44,12 @@ public class UserRepository {
             jdbcTemplate.update("""
                     UPDATE users
                     SET full_name = 'Angie Ramos',
-                        email = 'valesotelo.0806@gmail.com'
+                        email = 'valesotelo.0806@gmail.com',
+                        role_id = (SELECT id FROM roles WHERE name = 'ADMIN'),
+                        status = 'ACTIVE'
                     WHERE id = 1
                        OR email = 'admin@globalnet.com'
+                       OR email = 'valesotelo.0806@gmail.com'
                        OR (role_id = (SELECT id FROM roles WHERE name = 'ADMIN') AND (full_name LIKE '%Carlos%' OR full_name LIKE '%Ramirez%' OR full_name LIKE '%Admin%'))
                     """);
             jdbcTemplate.update("""

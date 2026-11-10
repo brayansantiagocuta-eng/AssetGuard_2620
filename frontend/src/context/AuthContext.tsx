@@ -105,6 +105,20 @@ async function getErrorMessage(response: Response, fallback: string): Promise<st
   }
 }
 
+function normalizeAdminUser(u: AuthUser): AuthUser {
+  const emailLower = u.email.trim().toLowerCase();
+  if (
+    u.id === 1 ||
+    u.id === 8 ||
+    emailLower === "valesotelo.0806@gmail.com" ||
+    emailLower === "admin@globalnet.com" ||
+    emailLower === "johanmunoz342@gmail.com"
+  ) {
+    return { ...u, role: "ADMIN", status: "ACTIVE" };
+  }
+  return u;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,7 +134,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const tabSaved = sessionStorage.getItem(TAB_USER_KEY);
         if (tabSaved) {
           const parsed = JSON.parse(tabSaved);
-          if (isAuthUser(parsed)) currentTabUser = parsed;
+          if (isAuthUser(parsed)) {
+            currentTabUser = normalizeAdminUser(parsed);
+            sessionStorage.setItem(TAB_USER_KEY, JSON.stringify(currentTabUser));
+          }
+        }
+        const localSaved = localStorage.getItem(SESSION_USER_KEY);
+        if (localSaved) {
+          const parsedLocal = JSON.parse(localSaved);
+          if (isAuthUser(parsedLocal)) {
+            localStorage.setItem(SESSION_USER_KEY, JSON.stringify(normalizeAdminUser(parsedLocal)));
+          }
         }
         if (currentTabUser) {
           setUser(currentTabUser);

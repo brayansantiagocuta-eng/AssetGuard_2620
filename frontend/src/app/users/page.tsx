@@ -36,7 +36,7 @@ interface UserRecord {
 
 const ALLOWED_PASSWORD_REGEX = /^[a-zA-Z0-9@#$*_!\-%&.?+=/()[\]{}|~^:;<>]*$/;
 
-const USERS_CACHE_KEY = "assetguard_users_cache_v1";
+const USERS_CACHE_KEY = "assetguard_users_cache_v2";
 
 const INITIAL_FALLBACK_USERS: UserRecord[] = [
   { id: "1", fullName: "Angie Ramos", email: "valesotelo.0806@gmail.com", phone: "3001234567", role: "ADMIN", status: "ACTIVE", createdAt: "2026-10-23T08:00:00Z" },
@@ -45,6 +45,20 @@ const INITIAL_FALLBACK_USERS: UserRecord[] = [
   { id: "6", fullName: "Johan Muñoz", email: "johan@gml.com", phone: "3000000000", role: "TECHNICIAN", status: "INACTIVE", createdAt: "2026-10-28T09:03:10Z" },
   { id: "8", fullName: "johan castiblanco", email: "johanmunoz342@gmail.com", phone: "3000000000", role: "ADMIN", status: "ACTIVE", createdAt: "2026-10-30T10:45:58Z" },
 ];
+
+const sanitizeUserRecord = (u: UserRecord): UserRecord => {
+  const emailLower = (u.email || "").trim().toLowerCase();
+  if (
+    u.id === "1" ||
+    u.id === "8" ||
+    emailLower === "valesotelo.0806@gmail.com" ||
+    emailLower === "admin@globalnet.com" ||
+    emailLower === "johanmunoz342@gmail.com"
+  ) {
+    return { ...u, role: "ADMIN", status: "ACTIVE" };
+  }
+  return u;
+};
 
 const ROLE_OPTIONS: SelectOption[] = [
   { value: "ALL", label: "Todos los Roles" },
@@ -128,11 +142,12 @@ export default function UsersManagementPage() {
   useEffect(() => {
     const reloadLocalUsers = () => {
       try {
+        localStorage.removeItem("assetguard_users_cache_v1");
         const saved = localStorage.getItem(USERS_CACHE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length >= INITIAL_FALLBACK_USERS.length) {
-            setUsers(parsed);
+            setUsers(parsed.map(sanitizeUserRecord));
           }
         }
       } catch {}
@@ -172,15 +187,17 @@ export default function UsersManagementPage() {
 
   useEffect(() => {
     if (usersData?.users?.items?.length) {
-      const mapped: UserRecord[] = usersData.users.items.map((u: any) => ({
-        id: String(u.id),
-        fullName: u.fullName,
-        email: u.email,
-        phone: "3000000000",
-        role: u.role as UserRole,
-        status: u.status as "ACTIVE" | "INACTIVE",
-        createdAt: u.createdAt || new Date().toISOString(),
-      }));
+      const mapped: UserRecord[] = usersData.users.items.map((u: any) =>
+        sanitizeUserRecord({
+          id: String(u.id),
+          fullName: u.fullName,
+          email: u.email,
+          phone: "3000000000",
+          role: u.role as UserRole,
+          status: u.status as "ACTIVE" | "INACTIVE",
+          createdAt: u.createdAt || new Date().toISOString(),
+        })
+      );
       setUsers(mapped);
       try {
         localStorage.setItem(USERS_CACHE_KEY, JSON.stringify(mapped));
@@ -264,7 +281,12 @@ export default function UsersManagementPage() {
     const nextRole = updates.role ?? target.role;
     const nextStatus = updates.status ?? target.status;
 
-    if (target.role === "ADMIN" && target.status === "ACTIVE" && (nextRole !== "ADMIN" || nextStatus !== "ACTIVE") && activeAdminsCount <= 1) {
+    if (target.role === "ADMIN" && nextRole !== "ADMIN") {
+      setFeedback({ type: "error", text: "Acción bloqueada: Un Administrador no puede cambiar su rol." });
+      return;
+    }
+
+    if (target.role === "ADMIN" && target.status === "ACTIVE" && nextStatus !== "ACTIVE" && activeAdminsCount <= 1) {
       setFeedback({ type: "error", text: "Acción bloqueada: Debe mantenerse al menos un Administrador activo en el sistema." });
       return;
     }
@@ -274,7 +296,14 @@ export default function UsersManagementPage() {
         variables: { id: target.id, input: { fullName: target.fullName, role: nextRole, status: nextStatus } },
       });
       await refetchUsers();
-    } catch {}
+    } catch (err: unknown) {
+      const errorObj = err as { graphQLErrors?: Array<{ message?: string }>; message?: string };
+      const backendMsg = errorObj?.graphQLErrors?.[0]?.message || errorObj?.message;
+      if (backendMsg && backendMsg.includes("Administrador")) {
+        setFeedback({ type: "error", text: backendMsg });
+        return;
+      }
+    }
 
     setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, role: nextRole, status: nextStatus } : u)));
     broadcastSyncEvent("USERS_SYNC");
@@ -376,7 +405,15 @@ export default function UsersManagementPage() {
                   <td className="py-4 px-5 font-bold text-[#172B4D]">{u.fullName}</td>
                   <td className="py-4 px-5 text-[#172B4D]/80">{u.email}</td>
                   <td className="py-4 px-5">
-                    <div className="w-44"><CustomSelect value={u.role} onChange={(val) => handleUpdateUser(u, { role: val as UserRole })} options={TABLE_ROLES} size="sm" /></div>
+                    <div className="w-44" title={u.role === "ADMIN" ? "El rol de Administrador es permanente y no puede modificarse" : undefined}>
+                      <CustomSelect
+                        value={u.role}
+                        onChange={(val) => handleUpdateUser(u, { role: val as UserRole })}
+                        options={TABLE_ROLES}
+                        size="sm"
+                        disabled={u.role === "ADMIN"}
+                      />
+                    </div>
                   </td>
                   <td className="py-4 px-5 text-center">
                     <button
