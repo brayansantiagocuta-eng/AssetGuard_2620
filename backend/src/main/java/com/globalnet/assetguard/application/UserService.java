@@ -129,6 +129,9 @@ public class UserService {
         if ("ADMIN".equals(current.role()) && !"ADMIN".equals(newRole)) {
             throw ApiException.conflict("Un Administrador no puede cambiar su rol.");
         }
+        if ("ADMIN".equals(current.role()) && !"ACTIVE".equals(newStatus)) {
+            throw ApiException.conflict("Un Administrador no puede desactivarse.");
+        }
 
         boolean removesActiveAdministrator = "ADMIN".equals(current.role())
                 && "ACTIVE".equals(current.status())

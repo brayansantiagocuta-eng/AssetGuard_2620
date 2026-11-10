@@ -213,8 +213,6 @@ export default function UsersManagementPage() {
     } catch {}
   }, [users]);
 
-  const activeAdminsCount = useMemo(() => users.filter((u) => u.role === "ADMIN" && u.status === "ACTIVE").length, [users]);
-
   const emailValidation = useMemo(() => validateUserEmail(newForm.email, users), [newForm.email, users]);
   const pwdErrors = useMemo(() => validateUserPassword(newForm.password), [newForm.password]);
   const phoneErrors = useMemo(() => validateUserPhone(newForm.phone), [newForm.phone]);
@@ -286,8 +284,8 @@ export default function UsersManagementPage() {
       return;
     }
 
-    if (target.role === "ADMIN" && target.status === "ACTIVE" && nextStatus !== "ACTIVE" && activeAdminsCount <= 1) {
-      setFeedback({ type: "error", text: "Acción bloqueada: Debe mantenerse al menos un Administrador activo en el sistema." });
+    if (target.role === "ADMIN" && nextStatus !== "ACTIVE") {
+      setFeedback({ type: "error", text: "Acción bloqueada: Un Administrador no puede desactivarse." });
       return;
     }
 
@@ -418,12 +416,21 @@ export default function UsersManagementPage() {
                   <td className="py-4 px-5 text-center">
                     <button
                       type="button"
+                      disabled={u.role === "ADMIN"}
                       onClick={() => handleUpdateUser(u, { status: u.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" })}
-                      title={u.status === "ACTIVE" ? "Activo — Clic para inactivar" : "Inactivo — Clic para activar"}
-                      className={`inline-flex items-center justify-center h-8 w-8 rounded-xl transition-all cursor-pointer shadow-xs ${
-                        u.status === "ACTIVE"
-                          ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25"
-                          : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/25"
+                      title={
+                        u.role === "ADMIN"
+                          ? "El Administrador no puede desactivarse"
+                          : u.status === "ACTIVE"
+                            ? "Activo — Clic para inactivar"
+                            : "Inactivo — Clic para activar"
+                      }
+                      className={`inline-flex items-center justify-center h-8 w-8 rounded-xl transition-all shadow-xs ${
+                        u.role === "ADMIN"
+                          ? "bg-emerald-500/60 text-white cursor-not-allowed opacity-60"
+                          : u.status === "ACTIVE"
+                            ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/25 cursor-pointer"
+                            : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/25 cursor-pointer"
                       }`}
                     >
                       <Power className="h-4 w-4 stroke-[2.5]" />
